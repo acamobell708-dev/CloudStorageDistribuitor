@@ -2,6 +2,13 @@
 
 A React-based web application that allows users to seamlessly store, view, download, and search their data online across multiple storage providers.
 
+## TODO
+
+1. Decide which platform will host the application.
+2. Replace the current Azure PAT, which expires after 90 days, with a managed
+   identity if the application is hosted on Azure, or an appropriate service
+   principal if another hosting platform is selected.
+
 ## Key Features & Requirements
 
 * **Storage Selection:** Choose your preferred storage provider and location.
@@ -55,6 +62,8 @@ Run `node PlatformConnectivityTests/RunAll.js`, then choose:
 
 1. Upload an image by entering its local file path.
 2. Remove the image files added by the latest Azure-image commit.
+3. Upload every supported image in a folder and its subfolders. Non-image files
+   are ignored, and the new images are grouped into one commit.
 
 Removal creates and pushes a new deletion commit; it does not rewrite Git
 history.

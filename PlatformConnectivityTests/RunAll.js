@@ -4,7 +4,8 @@ const readline = require("node:readline/promises");
 const { stdin: input, stdout: output } = require("node:process");
 const { startServer } = require("./testServer");
 const {
-  removeImagesFromLastCommit
+  removeImagesFromLastCommit,
+  uploadImages
 } = require("./AzureDevopRepoCRUD");
 
 const imageTypes = {
@@ -30,6 +31,28 @@ async function loadImage(suppliedPath) {
     contentType,
     filename: path.basename(absolutePath)
   };
+}
+
+async function findImagesInFolder(suppliedPath) {
+  const unquotedPath = suppliedPath.trim().replace(/^"(.*)"$/, "$1");
+  const folderPath = path.resolve(unquotedPath);
+  const entries = await fs.readdir(folderPath, { withFileTypes: true });
+  const images = [];
+
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    const entryPath = path.join(folderPath, entry.name);
+
+    if (entry.isDirectory()) {
+      images.push(...(await findImagesInFolder(entryPath)));
+      continue;
+    }
+
+    if (entry.isFile() && imageTypes[path.extname(entry.name).toLowerCase()]) {
+      images.push(await loadImage(entryPath));
+    }
+  }
+
+  return images;
 }
 
 async function uploadImage(suppliedPath) {
@@ -75,6 +98,24 @@ async function uploadImage(suppliedPath) {
   }
 }
 
+async function uploadImageFolder(suppliedPath) {
+  const images = await findImagesInFolder(suppliedPath);
+
+  if (images.length === 0) {
+    throw new Error("The folder does not contain any supported images");
+  }
+
+  const result = await uploadImages(images);
+  const newImages = result.images.filter((image) => !image.duplicate).length;
+  const duplicates = result.images.length - newImages;
+
+  console.log(
+    `Processed ${result.images.length} image(s): ` +
+      `${newImages} new, ${duplicates} duplicate(s).`
+  );
+  console.log(JSON.stringify(result, null, 2));
+}
+
 async function runAll() {
   const terminal = readline.createInterface({ input, output });
   let choice;
@@ -83,10 +124,13 @@ async function runAll() {
   try {
     console.log("1. Upload an image");
     console.log("2. Remove images added by the last Azure commit");
+    console.log("3. Upload a folder of images");
     choice = (await terminal.question("Choose an option: ")).trim();
 
     if (choice === "1") {
       suppliedPath = await terminal.question("Enter the image path: ");
+    } else if (choice === "3") {
+      suppliedPath = await terminal.question("Enter the folder path: ");
     }
   } finally {
     terminal.close();
@@ -104,7 +148,12 @@ async function runAll() {
     return;
   }
 
-  throw new Error("Please enter either 1 or 2");
+  if (choice === "3") {
+    await uploadImageFolder(suppliedPath);
+    return;
+  }
+
+  throw new Error("Please enter 1, 2, or 3");
 }
 
 runAll().catch((error) => {

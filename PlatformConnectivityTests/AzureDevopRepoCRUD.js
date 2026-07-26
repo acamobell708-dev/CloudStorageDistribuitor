@@ -38,6 +38,7 @@ const allowedImageTypes = {
   "image/png": ".png",
   "image/webp": ".webp"
 };
+const maximumImageSize = 10 * 1024 * 1024;
 
 async function runGit(argumentsList) {
   const configurationArguments = ["-c", "credential.helper="];
@@ -219,18 +220,34 @@ async function pushCurrentHead() {
   await runGit(pushArguments);
 }
 
-async function pushStoredImage(relativePath, filename) {
+async function pushStoredImages(images) {
   requirePushConfiguration();
 
-  if (!(await isTrackedInHead(relativePath))) {
-    await runGit(["add", "--", relativePath]);
+  const pathsToCommit = new Set();
+
+  for (const image of images) {
+    if (!(await isTrackedInHead(image.path))) {
+      pathsToCommit.add(image.path);
+    }
+  }
+
+  const uniquePaths = [...pathsToCommit];
+
+  if (uniquePaths.length > 0) {
+    await runGit(["add", "--", ...uniquePaths]);
+
+    const message =
+      uniquePaths.length === 1
+        ? `Add uploaded image ${path.basename(uniquePaths[0])}`
+        : `Add ${uniquePaths.length} uploaded images`;
+
     await runGit([
       "commit",
       "--only",
       "-m",
-      `Add uploaded image ${filename}`,
+      message,
       "--",
-      relativePath
+      ...uniquePaths
     ]);
   }
 
@@ -294,7 +311,7 @@ async function removeLastCommitImages() {
   };
 }
 
-async function saveAndOptionallyPushImage(image, originalName, contentType) {
+function validateImage(image, contentType) {
   const normalizedContentType = contentType?.split(";")[0].toLowerCase();
   const extension = allowedImageTypes[normalizedContentType];
 
@@ -306,7 +323,15 @@ async function saveAndOptionallyPushImage(image, originalName, contentType) {
     throw new Error("No image data was supplied");
   }
 
-  await ensureImageRepository();
+  if (image.length > maximumImageSize) {
+    throw new Error("Images must be 10 MB or smaller");
+  }
+
+  return extension;
+}
+
+async function storeImage(image, originalName, contentType) {
+  const extension = validateImage(image, contentType);
 
   const hash = createHash("sha256").update(image).digest("hex");
   const existingFilename = await findExistingImage(hash);
@@ -314,27 +339,12 @@ async function saveAndOptionallyPushImage(image, originalName, contentType) {
   if (existingFilename) {
     const existingPath = `images/${existingFilename}`;
 
-    if (shouldPush) {
-      const commit = await pushStoredImage(existingPath, existingFilename);
-
-      return {
-        commit,
-        duplicate: true,
-        filename: existingFilename,
-        path: existingPath,
-        pushed: true
-      };
-    }
-
     return {
       duplicate: true,
       filename: existingFilename,
-      path: existingPath,
-      pushed: false
+      path: existingPath
     };
   }
-
-  await fs.mkdir(imageDirectory, { recursive: true });
 
   const filename = `${hash}-${cleanName(originalName)}${extension}`;
   const absolutePath = path.join(imageDirectory, filename);
@@ -342,23 +352,60 @@ async function saveAndOptionallyPushImage(image, originalName, contentType) {
 
   await fs.writeFile(absolutePath, image, { flag: "wx" });
 
+  return {
+    duplicate: false,
+    filename,
+    path: relativePath
+  };
+}
+
+async function saveAndOptionallyPushImages(images) {
+  if (!Array.isArray(images) || images.length === 0) {
+    throw new Error("No images were supplied");
+  }
+
+  for (const image of images) {
+    validateImage(image.body, image.contentType);
+  }
+
+  await ensureImageRepository();
+
+  const storedImages = [];
+
+  for (const image of images) {
+    storedImages.push(
+      await storeImage(image.body, image.filename, image.contentType)
+    );
+  }
+
   if (!shouldPush) {
     return {
-      duplicate: false,
-      filename,
-      path: relativePath,
+      images: storedImages.map((image) => ({ ...image, pushed: false })),
       pushed: false
     };
   }
 
-  const commit = await pushStoredImage(relativePath, filename);
+  const commit = await pushStoredImages(storedImages);
 
   return {
     commit,
-    duplicate: false,
-    filename,
-    path: relativePath,
+    images: storedImages.map((image) => ({ ...image, pushed: true })),
     pushed: true
+  };
+}
+
+async function saveAndOptionallyPushImage(image, originalName, contentType) {
+  const result = await saveAndOptionallyPushImages([
+    {
+      body: image,
+      contentType,
+      filename: originalName
+    }
+  ]);
+
+  return {
+    ...result.images[0],
+    ...(result.commit ? { commit: result.commit } : {})
   };
 }
 
@@ -373,6 +420,12 @@ function uploadImage(...argumentsList) {
   return job;
 }
 
+function uploadImages(images) {
+  const job = operationQueue.then(() => saveAndOptionallyPushImages(images));
+  operationQueue = job.catch(() => undefined);
+  return job;
+}
+
 function removeImagesFromLastCommit() {
   const job = operationQueue.then(removeLastCommitImages);
   operationQueue = job.catch(() => undefined);
@@ -381,5 +434,6 @@ function removeImagesFromLastCommit() {
 
 module.exports = {
   removeImagesFromLastCommit,
-  uploadImage
+  uploadImage,
+  uploadImages
 };
