@@ -192,7 +192,7 @@ async function isTrackedInHead(relativePath) {
   return trackedPath === relativePath;
 }
 
-async function pushStoredImage(relativePath, filename) {
+function requirePushConfiguration() {
   if (!remote) {
     throw new Error(
       "AZURE_GIT_REMOTE must be set before Azure pushing is enabled"
@@ -204,6 +204,23 @@ async function pushStoredImage(relativePath, filename) {
       "AZURE_DEVOPS_PAT must be set before Azure pushing is enabled"
     );
   }
+}
+
+async function pushCurrentHead() {
+  requirePushConfiguration();
+
+  const pushArguments = ["push"];
+
+  if (ipv4Only) {
+    pushArguments.push("--ipv4");
+  }
+
+  pushArguments.push(remote, `HEAD:${branch}`);
+  await runGit(pushArguments);
+}
+
+async function pushStoredImage(relativePath, filename) {
+  requirePushConfiguration();
 
   if (!(await isTrackedInHead(relativePath))) {
     await runGit(["add", "--", relativePath]);
@@ -218,15 +235,63 @@ async function pushStoredImage(relativePath, filename) {
   }
 
   const commit = await runGit(["rev-parse", "HEAD"]);
-  const pushArguments = ["push"];
+  await pushCurrentHead();
+  return commit;
+}
 
-  if (ipv4Only) {
-    pushArguments.push("--ipv4");
+async function removeLastCommitImages() {
+  if (!shouldPush) {
+    throw new Error(
+      "AZURE_GIT_PUSH must be true before committed images can be removed"
+    );
   }
 
-  pushArguments.push(remote, `HEAD:${branch}`);
-  await runGit(pushArguments);
-  return commit;
+  requirePushConfiguration();
+  await ensureImageRepository();
+
+  if (!(await hasCommitHistory())) {
+    throw new Error("The Azure image repository has no commits");
+  }
+
+  const sourceCommit = await runGit(["rev-parse", "HEAD"]);
+  const output = await runGit([
+    "diff-tree",
+    "--root",
+    "--no-commit-id",
+    "--name-only",
+    "--diff-filter=A",
+    "-r",
+    "HEAD",
+    "--",
+    "images/"
+  ]);
+
+  const imagePaths = output
+    .split(/\r?\n/)
+    .filter((item) => item.startsWith("images/"));
+
+  if (imagePaths.length === 0) {
+    throw new Error("The last commit did not add any images");
+  }
+
+  await runGit(["rm", "--", ...imagePaths]);
+  await runGit([
+    "commit",
+    "--only",
+    "-m",
+    `Remove images added by ${sourceCommit.slice(0, 7)}`,
+    "--",
+    ...imagePaths
+  ]);
+
+  const commit = await runGit(["rev-parse", "HEAD"]);
+  await pushCurrentHead();
+
+  return {
+    commit,
+    removed: imagePaths,
+    sourceCommit
+  };
 }
 
 async function saveAndOptionallyPushImage(image, originalName, contentType) {
@@ -297,15 +362,24 @@ async function saveAndOptionallyPushImage(image, originalName, contentType) {
   };
 }
 
-let uploadQueue = Promise.resolve();
+let operationQueue = Promise.resolve();
 
 function uploadImage(...argumentsList) {
-  const job = uploadQueue.then(() =>
+  const job = operationQueue.then(() =>
     saveAndOptionallyPushImage(...argumentsList)
   );
 
-  uploadQueue = job.catch(() => undefined);
+  operationQueue = job.catch(() => undefined);
   return job;
 }
 
-module.exports = { uploadImage };
+function removeImagesFromLastCommit() {
+  const job = operationQueue.then(removeLastCommitImages);
+  operationQueue = job.catch(() => undefined);
+  return job;
+}
+
+module.exports = {
+  removeImagesFromLastCommit,
+  uploadImage
+};

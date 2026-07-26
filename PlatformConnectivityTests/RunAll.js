@@ -1,11 +1,11 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const readline = require("node:readline/promises");
+const { stdin: input, stdout: output } = require("node:process");
 const { startServer } = require("./testServer");
-
-const builtInPng = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-  "base64"
-);
+const {
+  removeImagesFromLastCommit
+} = require("./AzureDevopRepoCRUD");
 
 const imageTypes = {
   ".gif": "image/gif",
@@ -15,19 +15,9 @@ const imageTypes = {
   ".webp": "image/webp"
 };
 
-async function loadTestImage() {
-  const suppliedPath =
-    "C:\\Users\\Adam\\Pictures\\NewVersionUltrafiltration.jpg";
-
-  if (!suppliedPath) {
-    return {
-      body: builtInPng,
-      contentType: "image/png",
-      filename: "run-all-test.png"
-    };
-  }
-
-  const absolutePath = path.resolve(suppliedPath);
+async function loadImage(suppliedPath) {
+  const unquotedPath = suppliedPath.trim().replace(/^"(.*)"$/, "$1");
+  const absolutePath = path.resolve(unquotedPath);
   const extension = path.extname(absolutePath).toLowerCase();
   const contentType = imageTypes[extension];
 
@@ -42,8 +32,8 @@ async function loadTestImage() {
   };
 }
 
-async function runAll() {
-  const image = await loadTestImage();
+async function uploadImage(suppliedPath) {
+  const image = await loadImage(suppliedPath);
   const server = await startServer({ host: "127.0.0.1", port: 0 });
   const address = server.address();
 
@@ -83,6 +73,38 @@ async function runAll() {
 
     console.log("Server stopped");
   }
+}
+
+async function runAll() {
+  const terminal = readline.createInterface({ input, output });
+  let choice;
+  let suppliedPath;
+
+  try {
+    console.log("1. Upload an image");
+    console.log("2. Remove images added by the last Azure commit");
+    choice = (await terminal.question("Choose an option: ")).trim();
+
+    if (choice === "1") {
+      suppliedPath = await terminal.question("Enter the image path: ");
+    }
+  } finally {
+    terminal.close();
+  }
+
+  if (choice === "1") {
+    await uploadImage(suppliedPath);
+    return;
+  }
+
+  if (choice === "2") {
+    const result = await removeImagesFromLastCommit();
+    console.log("Removed and pushed:");
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  throw new Error("Please enter either 1 or 2");
 }
 
 runAll().catch((error) => {

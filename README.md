@@ -48,3 +48,13 @@ by `AZURE_IMAGE_REPO_DIR`, so Azure receives only files under its `images/`
 directory and never receives the GitHub repository's source history. For a
 hosted container, this directory should point to persistent storage such as
 `/data/azure-image-repo`.
+
+### Image CLI
+
+Run `node PlatformConnectivityTests/RunAll.js`, then choose:
+
+1. Upload an image by entering its local file path.
+2. Remove the image files added by the latest Azure-image commit.
+
+Removal creates and pushes a new deletion commit; it does not rewrite Git
+history.
