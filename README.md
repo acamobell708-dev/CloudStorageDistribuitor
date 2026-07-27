@@ -33,12 +33,12 @@ A React-based web application that allows users to seamlessly store, view, downl
 | :--- | :--- | :--- | :--- | :--- |
 | **Azure Repos** | 250 GB | Standard Git limits | Documents & Code | Poor for large images & video recordings |
 | **GitLab** | — | — | Backup | Serves as a secondary backup for Azure Repos |
-| **Box (Individual)** | 10 GB | 250 MB / file | Photos & Media | Reliable for individual photo storage |
+| **Box (Free Developer)** | 10 GB | 250 MB / file | Photos & Media | API testing with a CCG service account |
 | **Koofr (Starter)** | 10 GB | Unknown | General Files | **Warning:** Account/repo deleted after 2 years of inactivity |
 
 ---
 
-## Azure Stroage considerations
+## Azure Storage considerations
 
 Azure Repos storage does not grow by storing a complete copy of the repository
 for every commit. Git stores each unchanged image once and lets later commits
@@ -56,14 +56,38 @@ by `AZURE_DATA_REPO_DIR`, so Azure currently receives only files under its
 For a hosted container, this directory should point to persistent storage such
 as `/data/azure-data-repo`.
 
-### Image CLI
+## Testing
 
-Run `node PlatformConnectivityTests/RunAll.js`, then choose:
+The connectivity harness currently tests GIF, JPEG, PNG, and WebP operations
+against Azure DevOps Repos and Box.
 
-1. Upload an image by entering its local file path.
-2. Remove the image files added by the latest Azure data commit.
-3. Upload every supported image in a folder and its subfolders. Non-image files
-   are ignored, and the new images are grouped into one commit.
+### Running the CLI
 
-Removal creates and pushes a new deletion commit; it does not rewrite Git
-history.
+* Configure `.env` using the placeholders in `.env.example`.
+* Run `node PlatformConnectivityTests/RunAll.js`.
+* Select Azure or Box, then choose the required operation.
+
+### Azure DevOps Repos
+
+* Push one image through the temporary local server.
+* Push all supported images in a folder and its subfolders as one commit.
+* Remove images added by the latest Azure data commit. Removal creates a new
+  deletion commit and does not rewrite Git history.
+
+### Box
+
+* Uses Client Credentials Grant (CCG) to authenticate as the app's service
+  account.
+* Push one image, selected images, or a folder of images.
+* List file IDs and pull one, multiple, or all files from the configured folder.
+* Delete one or multiple files by ID after explicit confirmation. Box normally
+  moves deleted files to Trash.
+* Downloads default to `.box-downloads/` and do not overwrite existing files.
+
+### Current limits
+
+* The temporary upload server accepts images up to 10 MB.
+* Direct Box batch uploads accept files up to 50 MB; chunked uploads for the
+  account's 250 MB limit are not yet implemented.
+* Box operations target files directly inside `BOX_FOLDER_ID`. Remote
+  subfolders are not traversed, and local folder uploads are flattened.
