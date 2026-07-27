@@ -1,93 +1,173 @@
-# Project Overview
+# Cloud Storage Distributor
 
-A React-based web application that allows users to seamlessly store, view, download, and search their data online across multiple storage providers.
+A React and Node.js application for storing, finding, viewing, downloading, and
+versioning files across multiple cloud providers from one workspace.
 
-## TODO
+The first browser workflow is now implemented: choose almost any file up to
+50 MB and send it to the Box folder configured on the server. Images, PDFs,
+Word documents, Excel workbooks, text files, archives, audio, video, and other
+file types all use the same upload path. Box credentials and access tokens never
+enter the browser.
 
-1. Decide which platform will host the application.
-2. Replace the current Azure PAT, which expires after 90 days, with a managed
-   identity if the application is hosted on Azure, or an appropriate service
-   principal if another hosting platform is selected.
+## Current browser experience
 
-## Key Features & Requirements
+- Responsive React upload workspace with drag-and-drop and file selection.
+- Image thumbnails and metadata for other file types.
+- Browser-to-server upload progress and clear Box handoff states.
+- Server-side Box Client Credentials Grant authentication.
+- SHA-256 file naming and duplicate detection before upload.
+- Safe support for arbitrary non-empty files up to a configurable 50 MB limit.
+- A provider factory and shared storage base class ready for more providers.
+- Production build serving from the Node server.
 
-* **Storage Selection:** Choose your preferred storage provider and location.
-* **Direct Uploads:** Upload files directly through the web UI.
-* **In-App Media Viewing:** View supported files and media natively in the browser.
-* **Direct Downloads:** Download stored files directly from the platform.
-* **Global Search:** Easily search and locate your data across connected providers.
+Azure DevOps Repos is still available through the connectivity CLI. Its browser
+upload adapter is the next provider to add to the shared storage interface.
 
----
+## Project structure
 
-## Tech Stack
+```text
+public/                         Browser-safe React source
+  app/
+    api/                        Browser API clients
+    components/                 Reusable React components
+    App.jsx
+    main.jsx
+  index.html
+  styles.css
 
-* **Frontend:** React (JavaScript)
-* **Backend:** Node.js
-* **Hosting:** Hosted Online
+src/                            Trusted server code
+  config/                       Environment loading and limits
+  controllers/                  HTTP request coordination
+  errors/                       Safe application error types
+  middleware/                   API error handling
+  routes/                       Express routes and multipart parsing
+  services/
+    storage/
+      box/                      Box auth, API, and storage implementation
+      StorageProvider.js        Base class for future providers
+      StorageProviderFactory.js Provider registry
+  app.js                        Express application composition
+  server.js                     Server entry point
 
----
+tests/                          Local automated tests
+PlatformConnectivityTests/      Live Azure and Box CLI harness
+```
 
-## Storage Providers
+The browser calls `POST /api/storage/:provider/files`. The controller passes the
+in-memory file to `FileUploadService`, which selects the provider through
+`StorageProviderFactory`. `BoxStorageProvider` extends the common
+`StorageProvider` contract, so an Azure browser implementation can be registered
+without changing the controller or upload UI.
 
-| Provider | Capacity | Max Upload Size | Best Used For | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| **Azure Repos** | 250 GB | Standard Git limits | Documents & Code | Poor for large images & video recordings |
-| **GitLab** | — | — | Backup | Serves as a secondary backup for Azure Repos |
-| **Box (Free Developer)** | 10 GB | 250 MB / file | Photos & Media | API testing with a CCG service account |
-| **Koofr (Starter)** | 10 GB | Unknown | General Files | **Warning:** Account/repo deleted after 2 years of inactivity |
+## Requirements
 
----
+- Node.js 22.12 or newer.
+- A Box Platform Application configured for Server Authentication with Client
+  Credentials Grant.
+- The Box application authorized in the enterprise Admin Console.
+- Upload access to the folder set in `BOX_FOLDER_ID`.
 
-## Azure Storage considerations
+## Configure Box
 
-Azure Repos storage does not grow by storing a complete copy of the repository
-for every commit. Git stores each unchanged image once and lets later commits
-reference the same underlying object. Storage therefore grows approximately by
-the combined size of each unique image or edited image version, rather than
-exponentially with every commit. Deleting an image from the current branch does
-not reclaim the copy retained in Git history.
+Copy `.env.example` to `.env` and fill in the server-only Box values:
 
-### Repository separation
+```dotenv
+BOX_CLIENT_ID=
+BOX_CLIENT_SECRET=
+BOX_ENTERPRISE_ID=
+BOX_FOLDER_ID=
+```
 
-The GitHub repository stores the application source code and excludes uploaded
-images. Azure data operations use a separate Git working directory configured
-by `AZURE_DATA_REPO_DIR`, so Azure currently receives only files under its
-`images/` directory and never receives the GitHub repository's source history.
-For a hosted container, this directory should point to persistent storage such
-as `/data/azure-data-repo`.
+`BOX_CLIENT_SECRET` is deliberately read only by `src`. Do not move any Box
+credential into `public`, a Vite variable, or browser code.
 
-## Testing
+The complete local web settings are:
 
-The connectivity harness currently tests GIF, JPEG, PNG, and WebP operations
-against Azure DevOps Repos and Box.
+```dotenv
+HOST=127.0.0.1
+PORT=3000
+MAX_UPLOAD_SIZE_MB=50
+```
 
-### Running the CLI
+The direct upload route is capped at 50 MB because larger Box uploads should use
+the chunked upload API. `MAX_UPLOAD_SIZE_MB` may be lowered but not raised above
+50 until chunked uploads are implemented.
 
-* Configure `.env` using the placeholders in `.env.example`.
-* Run `node PlatformConnectivityTests/RunAll.js`.
-* Select Azure or Box, then choose the required operation.
+## Run locally
 
-### Azure DevOps Repos
+Install dependencies:
 
-* Push one image through the temporary local server.
-* Push all supported images in a folder and its subfolders as one commit.
-* Remove images added by the latest Azure data commit. Removal creates a new
-  deletion commit and does not rewrite Git history.
+```shell
+npm install
+```
 
-### Box
+Start the React development server and watched Node server together:
 
-* Uses Client Credentials Grant (CCG) to authenticate as the app's service
-  account.
-* Push one image, selected images, or a folder of images.
-* List file IDs and pull one, multiple, or all files from the configured folder.
-* Delete one or multiple files by ID after explicit confirmation. Box normally
-  moves deleted files to Trash.
-* Downloads default to `.box-downloads/` and do not overwrite existing files.
+```shell
+npm run dev
+```
 
-### Current limits
+Open `http://127.0.0.1:5173`. Vite proxies `/api` requests to the Node server on
+port 3000.
 
-* The temporary upload server accepts images up to 10 MB.
-* Direct Box batch uploads accept files up to 50 MB; chunked uploads for the
-  account's 250 MB limit are not yet implemented.
-* Box operations target files directly inside `BOX_FOLDER_ID`. Remote
-  subfolders are not traversed, and local folder uploads are flattened.
+## Test and build
+
+Run the local automated tests:
+
+```shell
+npm test
+```
+
+Create the optimized React build:
+
+```shell
+npm run build
+```
+
+Start the production Node server, which serves the built app from `dist`:
+
+```shell
+npm start
+```
+
+## Web API
+
+| Method | Endpoint | Purpose |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | Confirm that the Node service is running |
+| `GET` | `/api/storage/providers` | List browser-ready storage providers |
+| `POST` | `/api/storage/box/files` | Upload one multipart `file` to Box |
+
+Successful new uploads return `201`. If the SHA-256 content hash already exists
+in the configured Box folder, no second copy is created and the existing file
+is returned with `200`.
+
+## Connectivity CLI
+
+The original live connectivity harness remains available:
+
+```shell
+npm run test:connectivity
+```
+
+It provides these operations:
+
+- Azure: upload one supported image, upload a recursive image folder, or remove
+  images introduced by the latest Azure data commit.
+- Box: upload one or more files, list file IDs, download files, and move selected
+  files to Box Trash.
+
+The Box CLI adapter now calls the same `src/services/storage/box` implementation
+as the web API, avoiding separate authentication and CRUD implementations.
+
+## Storage roadmap
+
+| Provider | Current state | Best use |
+| :--- | :--- | :--- |
+| Box | Browser upload and CLI CRUD | General files and media |
+| Azure DevOps Repos | Image-oriented CLI operations | Versioned documents and code |
+| GitLab | Planned | Secondary source backup |
+| Koofr | Planned | General file storage |
+
+Next useful increments are a Box file browser/download page, persisted transfer
+activity, Azure's `StorageProvider` adapter, and chunked Box uploads above 50 MB.
