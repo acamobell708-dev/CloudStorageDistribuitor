@@ -50,18 +50,18 @@ not reclaim the copy retained in Git history.
 ### Repository separation
 
 The GitHub repository stores the application source code and excludes uploaded
-images. Azure image operations use a separate Git working directory configured
-by `AZURE_IMAGE_REPO_DIR`, so Azure receives only files under its `images/`
-directory and never receives the GitHub repository's source history. For a
-hosted container, this directory should point to persistent storage such as
-`/data/azure-image-repo`.
+images. Azure data operations use a separate Git working directory configured
+by `AZURE_DATA_REPO_DIR`, so Azure currently receives only files under its
+`images/` directory and never receives the GitHub repository's source history.
+For a hosted container, this directory should point to persistent storage such
+as `/data/azure-data-repo`.
 
 ### Image CLI
 
 Run `node PlatformConnectivityTests/RunAll.js`, then choose:
 
 1. Upload an image by entering its local file path.
-2. Remove the image files added by the latest Azure-image commit.
+2. Remove the image files added by the latest Azure data commit.
 3. Upload every supported image in a folder and its subfolders. Non-image files
    are ignored, and the new images are grouped into one commit.
 

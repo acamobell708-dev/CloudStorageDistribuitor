@@ -22,11 +22,11 @@ const shouldPush = process.env.AZURE_GIT_PUSH === "true";
 const pat = process.env.AZURE_DEVOPS_PAT;
 const ipv4Only = process.env.GIT_IPV4_ONLY === "true";
 const sslBackend = process.env.GIT_SSL_BACKEND;
-const imageRepoRoot = path.resolve(
+const dataRepoRoot = path.resolve(
   codeRepoRoot,
-  process.env.AZURE_IMAGE_REPO_DIR || ".azure-image-repo"
+  process.env.AZURE_DATA_REPO_DIR || ".azure-data-repo"
 );
-const imageDirectory = path.join(imageRepoRoot, "images");
+const imageDirectory = path.join(dataRepoRoot, "images");
 const gitAuthorName =
   process.env.AZURE_GIT_AUTHOR_NAME || "Cloud Storage Image Service";
 const gitAuthorEmail =
@@ -73,7 +73,7 @@ async function runGit(argumentsList) {
       "git",
       [...configurationArguments, ...argumentsList],
       {
-        cwd: imageRepoRoot,
+        cwd: dataRepoRoot,
         env: environment,
         windowsHide: true
       }
@@ -86,7 +86,7 @@ async function runGit(argumentsList) {
 }
 
 function toGitPath(absolutePath) {
-  return path.relative(imageRepoRoot, absolutePath).split(path.sep).join("/");
+  return path.relative(dataRepoRoot, absolutePath).split(path.sep).join("/");
 }
 
 function cleanName(originalName) {
@@ -150,15 +150,15 @@ async function fetchExistingAzureHistory() {
   }
 }
 
-let imageRepositoryReady;
+let dataRepositoryReady;
 
-async function ensureImageRepository() {
-  if (!imageRepositoryReady) {
-    imageRepositoryReady = (async () => {
-      await fs.mkdir(imageRepoRoot, { recursive: true });
+async function ensureDataRepository() {
+  if (!dataRepositoryReady) {
+    dataRepositoryReady = (async () => {
+      await fs.mkdir(dataRepoRoot, { recursive: true });
 
       try {
-        await fs.access(path.join(imageRepoRoot, ".git"));
+        await fs.access(path.join(dataRepoRoot, ".git"));
       } catch {
         await runGit(["init", "--initial-branch", branch]);
       }
@@ -174,7 +174,7 @@ async function ensureImageRepository() {
     })();
   }
 
-  return imageRepositoryReady;
+  return dataRepositoryReady;
 }
 
 async function isTrackedInHead(relativePath) {
@@ -264,10 +264,10 @@ async function removeLastCommitImages() {
   }
 
   requirePushConfiguration();
-  await ensureImageRepository();
+  await ensureDataRepository();
 
   if (!(await hasCommitHistory())) {
-    throw new Error("The Azure image repository has no commits");
+    throw new Error("The Azure data repository has no commits");
   }
 
   const sourceCommit = await runGit(["rev-parse", "HEAD"]);
@@ -368,7 +368,7 @@ async function saveAndOptionallyPushImages(images) {
     validateImage(image.body, image.contentType);
   }
 
-  await ensureImageRepository();
+  await ensureDataRepository();
 
   const storedImages = [];
 

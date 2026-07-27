@@ -4,4 +4,5 @@ node_modules/
 !.env.example
 
 uploaded-images/
-.azure-image-repo/
+.azure-data-repo/
+.box-downloads/
