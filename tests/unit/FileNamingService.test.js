@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
   FileNamingService
-} = require("../src/services/storage/FileNamingService");
+} = require("../../src/services/storage/FileNamingService");
 
 test("creates stable SHA-256 names while preserving a safe extension", () => {
   const service = new FileNamingService();

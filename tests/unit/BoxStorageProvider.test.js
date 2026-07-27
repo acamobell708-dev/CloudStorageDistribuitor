@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
   BoxStorageProvider
-} = require("../src/services/storage/box/BoxStorageProvider");
+} = require("../../src/services/storage/box/BoxStorageProvider");
 
 function createApiClient(responses) {
   const calls = [];

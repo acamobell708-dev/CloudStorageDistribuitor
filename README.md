@@ -41,6 +41,7 @@ src/                            Trusted server code
   errors/                       Safe application error types
   middleware/                   API error handling
   routes/                       Express routes and multipart parsing
+  scripts/                      Cross-platform development/CI utilities
   services/
     storage/
       box/                      Box auth, API, and storage implementation
@@ -49,7 +50,10 @@ src/                            Trusted server code
   app.js                        Express application composition
   server.js                     Server entry point
 
-tests/                          Local automated tests
+tests/
+  unit/                         Isolated service and helper tests
+  integration/                  HTTP API and middleware tests
+.github/workflows/ci.yml        Push/PR verification and build delivery
 PlatformConnectivityTests/      Live Azure and Box CLI harness
 ```
 
@@ -112,7 +116,25 @@ port 3000.
 
 ## Test and build
 
-Run the local automated tests:
+Check the syntax of the server, CLI, and test JavaScript:
+
+```shell
+npm run check:syntax
+```
+
+Run the isolated unit tests:
+
+```shell
+npm run test:unit
+```
+
+Run the HTTP integration tests:
+
+```shell
+npm run test:integration
+```
+
+Run both test suites:
 
 ```shell
 npm test
@@ -124,11 +146,26 @@ Create the optimized React build:
 npm run build
 ```
 
+The Vite build also parses and validates the React JSX and browser modules.
+
 Start the production Node server, which serves the built app from `dist`:
 
 ```shell
 npm start
 ```
+
+## GitHub CI/CD
+
+`.github/workflows/ci.yml` runs on every push and pull request. It installs the
+exact dependency versions from `package-lock.json`, checks server/test syntax,
+runs unit and integration tests separately, and creates the production React
+build. The tested `dist` directory is retained as a downloadable workflow
+artifact for seven days.
+
+No Box secrets are required by this workflow because provider calls are mocked
+in unit tests and integration tests inject an in-memory test provider. Live Box
+connectivity remains an explicit local operation rather than running against
+real cloud data on every push.
 
 ## Web API
 

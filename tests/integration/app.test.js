@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
-const { createApp } = require("../src/app");
+const { createApp } = require("../../src/app");
 
 function createTestApplication(overrides = {}) {
   const provider = {
