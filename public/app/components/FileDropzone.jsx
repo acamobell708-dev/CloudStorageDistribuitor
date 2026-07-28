@@ -10,6 +10,10 @@ function formatBytes(size) {
     return `${(size / 1024).toFixed(1)} KB`;
   }
 
+  if (size >= 1024 * 1024 * 1024) {
+    return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  }
+
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -21,6 +25,8 @@ function getFileExtension(filename) {
 }
 
 export function FileDropzone({
+  acceptedDescription = "Files",
+  acceptedFileTypes = ["*/*"],
   disabled,
   file,
   maximumUploadSizeBytes,
@@ -127,6 +133,11 @@ export function FileDropzone({
           event.target.value = "";
         }}
         ref={inputRef}
+        accept={
+          acceptedFileTypes.includes("*/*")
+            ? undefined
+            : acceptedFileTypes.join(",")
+        }
         type="file"
       />
       <div className="upload-orbit">
@@ -141,7 +152,7 @@ export function FileDropzone({
         or <span>browse your device</span>
       </p>
       <small>
-        Images, documents, archives and more · up to{" "}
+        {acceptedDescription} · up to{" "}
         {formatBytes(maximumUploadSizeBytes)}
       </small>
     </div>

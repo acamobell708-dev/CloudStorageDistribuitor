@@ -4,34 +4,54 @@ const test = require("node:test");
 const { createApp } = require("../../src/app");
 
 function createTestApplication(overrides = {}) {
-  const provider = {
-    displayName: "Box",
-    getStatus: () => ({
+  const createProvider = (key, displayName) => ({
+    acceptedFileTypes:
+      key === "azure"
+        ? ["image/*", "audio/*", "video/*"]
+        : ["*/*"],
+    description: `${displayName} test provider`,
+    displayName,
+    getMaximumUploadSizeBytes: async () =>
+      overrides.maximumUploadSizeBytes || 1024,
+    getStatus: async () => ({
+      acceptedFileTypes:
+        key === "azure"
+          ? ["image/*", "audio/*", "video/*"]
+          : ["*/*"],
       configured: true,
-      displayName: "Box",
-      key: "box",
-      maximumUploadSizeBytes: 1024
+      description: `${displayName} test provider`,
+      displayName,
+      key,
+      maximumUploadSizeBytes:
+        overrides.maximumUploadSizeBytes || 1024
     }),
-    key: "box",
+    isConfigured: () => true,
+    key,
+    maximumUploadSizeBytes:
+      overrides.maximumUploadSizeBytes || 1024,
     uploadFile: async (file) => ({
       duplicate: false,
       filename: `stored-${file.originalname}`,
-      id: "box-file-1",
+      id: key === "box" ? "box-file-1" : undefined,
       originalName: file.originalname,
-      provider: "box",
+      path: key === "azure" ? "images/stored-file.png" : undefined,
+      provider: key,
       pushed: true,
       size: file.size
     })
-  };
+  });
+  const providers = new Map([
+    ["box", createProvider("box", "Box")],
+    ["azure", createProvider("azure", "Azure Repos")]
+  ]);
   const providerFactory = {
-    get: (key) => {
-      assert.equal(key, "box");
-      return provider;
-    },
-    list: () => [provider.getStatus()]
+    get: (key) => providers.get(key),
+    list: async () =>
+      Promise.all([...providers.values()].map((provider) =>
+        provider.getStatus()
+      ))
   };
   const environment = {
-    maximumUploadSizeBytes: overrides.maximumUploadSizeBytes || 1024,
     projectRoot: path.join(__dirname, "missing-build")
   };
 
@@ -68,6 +88,29 @@ test("reports API health and configured storage providers", async () => {
     assert.equal(health.status, "ok");
     assert.equal(providers.providers[0].key, "box");
     assert.equal(providers.providers[0].configured, true);
+    assert.equal(providers.providers[1].key, "azure");
+  });
+});
+
+test("routes a media upload to the selected Azure provider", async () => {
+  await withServer(createTestApplication(), async (baseUrl) => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob(["image"], { type: "image/png" }),
+      "photo.png"
+    );
+
+    const response = await fetch(`${baseUrl}/api/storage/azure/files`, {
+      body: form,
+      method: "POST"
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(body.file.provider, "azure");
+    assert.equal(body.file.path, "images/stored-file.png");
+    assert.equal(body.message, "photo.png was sent to Azure Repos");
   });
 });
 

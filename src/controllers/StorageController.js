@@ -6,10 +6,14 @@ class StorageController {
     this.providerFactory = providerFactory;
   }
 
-  listProviders = (request, response) => {
-    response.json({
-      providers: this.providerFactory.list()
-    });
+  listProviders = async (request, response, next) => {
+    try {
+      response.json({
+        providers: await this.providerFactory.list()
+      });
+    } catch (error) {
+      next(error);
+    }
   };
 
   uploadFile = async (request, response, next) => {

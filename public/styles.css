@@ -432,6 +432,57 @@ main {
   font-weight: 700;
 }
 
+.provider-select {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 14px;
+  color: #7d8798;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.provider-select-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 210px;
+  height: 42px;
+  padding-left: 12px;
+  border: 1px solid #dce3ee;
+  border-radius: 10px;
+  color: #2766e6;
+  background: #fbfcff;
+}
+
+.provider-select-control select {
+  width: 100%;
+  height: 100%;
+  padding: 0 32px 0 9px;
+  border: 0;
+  outline: 0;
+  color: #2a3851;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.provider-select-control select:focus-visible {
+  border-radius: 7px;
+  box-shadow: 0 0 0 2px rgba(33, 99, 238, 0.18);
+}
+
+.select-chevron {
+  position: absolute;
+  right: 12px;
+  color: #8390a4;
+  pointer-events: none;
+  font-size: 13px;
+}
+
 .dropzone {
   position: relative;
   display: flex;
@@ -829,12 +880,16 @@ main {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
   min-height: 67px;
   margin-bottom: 10px;
   padding: 11px;
   border: 1px solid #e5e9f0;
   border-radius: 12px;
+  color: inherit;
   background: #fcfdff;
+  cursor: pointer;
+  text-align: left;
 }
 
 .provider-card.is-selected {
@@ -847,7 +902,7 @@ main {
   opacity: 0.62;
 }
 
-.provider-logo {
+.provider-card .provider-logo {
   display: grid;
   flex: 0 0 auto;
   place-items: center;
@@ -867,7 +922,7 @@ main {
 }
 
 .provider-card strong,
-.provider-card span {
+.provider-card-copy > span {
   display: block;
 }
 
@@ -877,12 +932,13 @@ main {
   font-size: 11px;
 }
 
-.provider-card > div:nth-child(2) > span {
+.provider-card-copy > span {
   color: #919aaa;
   font-size: 8px;
+  line-height: 1.4;
 }
 
-.provider-check {
+.provider-card .provider-check {
   display: grid;
   place-items: center;
   width: 19px;
@@ -1166,6 +1222,16 @@ main {
 
   .dropzone {
     min-height: 236px;
+  }
+
+  .provider-select {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .provider-select-control {
+    width: 100%;
   }
 
   .provider-panel {

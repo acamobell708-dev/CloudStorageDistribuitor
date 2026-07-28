@@ -51,7 +51,8 @@ function createApp(options = {}) {
     "/api/storage",
     createStorageRoutes({
       controller,
-      maximumUploadSizeBytes: config.maximumUploadSizeBytes
+      providerFactory,
+      uploadTempDirectory: config.uploadTempDirectory
     })
   );
   app.use("/api", notFoundHandler);

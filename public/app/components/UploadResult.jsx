@@ -3,6 +3,12 @@ import { Icon } from "./Icon";
 
 export function UploadResult({ onReset, result }) {
   const file = result.file;
+  const storageReference =
+    file.provider === "azure"
+      ? file.commit
+        ? `Commit ${file.commit.slice(0, 7)}`
+        : file.path
+      : `Box ID ${file.id}`;
 
   return (
     <div className="result-card" role="status">
@@ -16,7 +22,7 @@ export function UploadResult({ onReset, result }) {
         <h3>{file.originalName || file.filename}</h3>
         <p>{result.message}</p>
         <div className="result-meta">
-          <span>Box ID {file.id}</span>
+          <span>{storageReference}</span>
           <i aria-hidden="true">•</i>
           <span>{formatBytes(file.size)}</span>
           <i aria-hidden="true">•</i>

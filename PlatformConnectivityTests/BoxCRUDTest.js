@@ -7,8 +7,7 @@ const {
 // the web API. Keeping this adapter preserves the original function exports
 // while credentials, validation, pagination, and network work remain in src.
 const provider = new BoxStorageProvider({
-  ...environment.box,
-  maximumUploadSizeBytes: environment.maximumUploadSizeBytes
+  ...environment.box
 });
 
 const deleteFile = (...argumentsList) =>

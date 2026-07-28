@@ -1,0 +1,773 @@
+const fs = require("node:fs/promises");
+const path = require("node:path");
+const { constants: fsConstants } = require("node:fs");
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
+const {
+  ConfigurationError,
+  ValidationError
+} = require("../../../errors/ApplicationError");
+const { FileNamingService } = require("../FileNamingService");
+const { StorageProvider } = require("../StorageProvider");
+
+const defaultExecFileAsync = promisify(execFile);
+
+const mediaExtensions = {
+  audio: new Set([
+    ".aac",
+    ".aiff",
+    ".alac",
+    ".flac",
+    ".m4a",
+    ".mid",
+    ".midi",
+    ".mp3",
+    ".oga",
+    ".ogg",
+    ".opus",
+    ".wav",
+    ".wma"
+  ]),
+  document: new Set([
+    ".csv",
+    ".doc",
+    ".docx",
+    ".json",
+    ".md",
+    ".odp",
+    ".ods",
+    ".odt",
+    ".pdf",
+    ".ppt",
+    ".pptx",
+    ".rtf",
+    ".txt",
+    ".xls",
+    ".xlsx",
+    ".xml"
+  ]),
+  image: new Set([
+    ".avif",
+    ".bmp",
+    ".gif",
+    ".heic",
+    ".heif",
+    ".ico",
+    ".jfif",
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".svg",
+    ".tif",
+    ".tiff",
+    ".webp"
+  ]),
+  source: new Set([
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cs",
+    ".css",
+    ".dart",
+    ".go",
+    ".gradle",
+    ".groovy",
+    ".h",
+    ".hpp",
+    ".htm",
+    ".html",
+    ".java",
+    ".js",
+    ".jsx",
+    ".kt",
+    ".kts",
+    ".lua",
+    ".mjs",
+    ".php",
+    ".pl",
+    ".ps1",
+    ".py",
+    ".r",
+    ".rb",
+    ".rs",
+    ".sass",
+    ".scala",
+    ".scss",
+    ".sh",
+    ".sol",
+    ".sql",
+    ".svelte",
+    ".swift",
+    ".ts",
+    ".tsx",
+    ".vb",
+    ".vue",
+    ".yaml",
+    ".yml"
+  ]),
+  video: new Set([
+    ".3g2",
+    ".3gp",
+    ".avi",
+    ".m4v",
+    ".mkv",
+    ".mov",
+    ".mp4",
+    ".mpeg",
+    ".mpg",
+    ".mts",
+    ".ogv",
+    ".ts",
+    ".webm",
+    ".wmv"
+  ])
+};
+
+const mediaDirectories = {
+  audio: "media/audio",
+  document: "documents",
+  image: "images",
+  source: "source",
+  video: "media/video"
+};
+
+const documentMimeTypes = new Set([
+  "application/json",
+  "application/msword",
+  "application/pdf",
+  "application/rtf",
+  "application/vnd.ms-excel",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.oasis.opendocument.presentation",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/xml"
+]);
+
+const sourceMimeTypes = new Set([
+  "application/javascript",
+  "application/typescript",
+  "application/x-httpd-php",
+  "application/x-javascript",
+  "application/x-python-code",
+  "application/x-sh",
+  "application/x-shellscript"
+]);
+
+class AzureDevOpsStorageProvider extends StorageProvider {
+  constructor(options = {}) {
+    super({
+      acceptedFileTypes: [
+        "image/*",
+        "audio/*",
+        "video/*",
+        ".csv",
+        ".doc",
+        ".docx",
+        ".json",
+        ".md",
+        ".odp",
+        ".ods",
+        ".odt",
+        ".pdf",
+        ".ppt",
+        ".pptx",
+        ".rtf",
+        ".txt",
+        ".xls",
+        ".xlsx",
+        ".xml",
+        ".c",
+        ".cc",
+        ".cpp",
+        ".cs",
+        ".css",
+        ".dart",
+        ".go",
+        ".gradle",
+        ".groovy",
+        ".h",
+        ".hpp",
+        ".htm",
+        ".html",
+        ".java",
+        ".js",
+        ".jsx",
+        ".kt",
+        ".kts",
+        ".lua",
+        ".mjs",
+        ".php",
+        ".pl",
+        ".ps1",
+        ".py",
+        ".r",
+        ".rb",
+        ".rs",
+        ".sass",
+        ".scala",
+        ".scss",
+        ".sh",
+        ".sol",
+        ".sql",
+        ".svelte",
+        ".swift",
+        ".ts",
+        ".tsx",
+        ".vb",
+        ".vue",
+        ".yaml",
+        ".yml"
+      ],
+      description: "Versioned documents, source code, images, audio and video",
+      displayName: "Azure Repos",
+      key: "azure",
+      maximumUploadSizeBytes:
+        options.maximumUploadSizeBytes || 100 * 1024 * 1024
+    });
+
+    this.branch = options.branch || "main";
+    this.codeRepoRoot = options.codeRepoRoot;
+    this.dataRepoRoot = path.resolve(
+      options.dataRepoRoot || ".azure-data-repo"
+    );
+    this.execFileAsync = options.execFileAsync || defaultExecFileAsync;
+    this.fileNamingService =
+      options.fileNamingService || new FileNamingService();
+    this.gitAuthorEmail =
+      options.gitAuthorEmail || "media-service@localhost";
+    this.gitAuthorName =
+      options.gitAuthorName || "Cloud Storage Media Service";
+    this.ipv4Only = Boolean(options.ipv4Only);
+    this.pat = options.pat;
+    this.remote = options.remote;
+    this.shouldPush = Boolean(options.shouldPush);
+    this.sslBackend = options.sslBackend;
+    this.dataRepositoryReady = undefined;
+    this.operationQueue = Promise.resolve();
+
+    if (
+      this.codeRepoRoot &&
+      path.resolve(this.codeRepoRoot) === this.dataRepoRoot
+    ) {
+      throw new ConfigurationError(
+        "AZURE_DATA_REPO_DIR must not be the application repository"
+      );
+    }
+  }
+
+  isConfigured() {
+    return Boolean(this.remote && this.pat && this.shouldPush);
+  }
+
+  getStorageLocation(filename, contentType) {
+    const extension = path.extname(filename || "").toLowerCase();
+    const normalizedContentType = String(contentType || "")
+      .split(";")[0]
+      .toLowerCase();
+    const extensionCategory = Object.entries(mediaExtensions).find(
+      ([, extensions]) => extensions.has(extension)
+    )?.[0];
+
+    if (!extensionCategory) {
+      throw new ValidationError(
+        `${filename || "The file"} is not a supported document, source code, image, audio, or video format`
+      );
+    }
+
+    const mediaMimeCategory = ["image", "audio", "video"].find((category) =>
+      normalizedContentType.startsWith(`${category}/`)
+    );
+    const mimeCategory =
+      mediaMimeCategory ||
+      (documentMimeTypes.has(normalizedContentType)
+        ? "document"
+        : sourceMimeTypes.has(normalizedContentType)
+          ? "source"
+          : normalizedContentType.startsWith("text/") &&
+              ["document", "source"].includes(extensionCategory)
+            ? extensionCategory
+            : undefined);
+
+    if (mimeCategory && mimeCategory !== extensionCategory) {
+      throw new ValidationError(
+        `${filename} does not match its reported ${contentType} media type`
+      );
+    }
+
+    if (
+      normalizedContentType &&
+      normalizedContentType !== "application/octet-stream" &&
+      normalizedContentType !== "application/ogg" &&
+      !mimeCategory
+    ) {
+      throw new ValidationError(
+        `Unsupported Azure file type: ${contentType}`
+      );
+    }
+
+    return {
+      category: extensionCategory,
+      extension,
+      relativeDirectory: mediaDirectories[extensionCategory]
+    };
+  }
+
+  getMediaLocation(filename, contentType) {
+    return this.getStorageLocation(filename, contentType);
+  }
+
+  async runGit(argumentsList) {
+    const configurationArguments = ["-c", "credential.helper="];
+    const processEnvironment = {
+      ...process.env,
+      GCM_INTERACTIVE: "Never",
+      GIT_TERMINAL_PROMPT: "0"
+    };
+
+    delete processEnvironment.GIT_ASKPASS;
+    delete processEnvironment.SSH_ASKPASS;
+    delete processEnvironment.VSCODE_GIT_ASKPASS_NODE;
+    delete processEnvironment.VSCODE_GIT_ASKPASS_EXTRA_ARGS;
+    delete processEnvironment.VSCODE_GIT_IPC_HANDLE;
+
+    if (this.pat) {
+      const encodedPat = Buffer.from(`:${this.pat}`).toString("base64");
+      processEnvironment.AZURE_GIT_AUTH_HEADER =
+        `Authorization: Basic ${encodedPat}`;
+      configurationArguments.push(
+        "--config-env=http.extraheader=AZURE_GIT_AUTH_HEADER"
+      );
+    }
+
+    if (this.sslBackend) {
+      configurationArguments.push(
+        "-c",
+        `http.sslBackend=${this.sslBackend}`
+      );
+    }
+
+    try {
+      const { stdout } = await this.execFileAsync(
+        "git",
+        [...configurationArguments, ...argumentsList],
+        {
+          cwd: this.dataRepoRoot,
+          env: processEnvironment,
+          windowsHide: true
+        }
+      );
+
+      return stdout.trim();
+    } catch (error) {
+      throw new Error(error.stderr?.trim() || error.message);
+    }
+  }
+
+  toGitPath(absolutePath) {
+    return path
+      .relative(this.dataRepoRoot, absolutePath)
+      .split(path.sep)
+      .join("/");
+  }
+
+  async hasCommitHistory() {
+    try {
+      await this.runGit(["rev-parse", "--verify", "HEAD"]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async fetchExistingAzureHistory() {
+    if (!this.shouldPush || !this.remote || !this.pat) {
+      return;
+    }
+
+    const fetchArguments = ["fetch"];
+
+    if (this.ipv4Only) {
+      fetchArguments.push("--ipv4");
+    }
+
+    fetchArguments.push("--depth=1", this.remote, this.branch);
+
+    try {
+      await this.runGit(fetchArguments);
+      await this.runGit([
+        "checkout",
+        "-B",
+        this.branch,
+        "FETCH_HEAD"
+      ]);
+    } catch (error) {
+      const remoteIsEmpty =
+        /couldn't find remote ref|remote ref does not exist|not found/i.test(
+          error.message
+        );
+
+      if (!remoteIsEmpty) {
+        throw error;
+      }
+    }
+  }
+
+  async ensureDataRepository() {
+    if (!this.dataRepositoryReady) {
+      this.dataRepositoryReady = (async () => {
+        await fs.mkdir(this.dataRepoRoot, { recursive: true });
+
+        try {
+          await fs.access(path.join(this.dataRepoRoot, ".git"));
+        } catch {
+          await this.runGit(["init", "--initial-branch", this.branch]);
+        }
+
+        await this.runGit([
+          "config",
+          "user.name",
+          this.gitAuthorName
+        ]);
+        await this.runGit([
+          "config",
+          "user.email",
+          this.gitAuthorEmail
+        ]);
+
+        if (!(await this.hasCommitHistory())) {
+          await this.fetchExistingAzureHistory();
+        }
+
+        for (const directory of Object.values(mediaDirectories)) {
+          await fs.mkdir(path.join(this.dataRepoRoot, directory), {
+            recursive: true
+          });
+        }
+      })();
+    }
+
+    return this.dataRepositoryReady;
+  }
+
+  async findExistingMedia(hash, relativeDirectory) {
+    const directory = path.join(this.dataRepoRoot, relativeDirectory);
+
+    try {
+      const filenames = await fs.readdir(directory);
+      return filenames.find((filename) => filename.startsWith(`${hash}-`));
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        return undefined;
+      }
+
+      throw error;
+    }
+  }
+
+  async isTrackedInHead(relativePath) {
+    if (!(await this.hasCommitHistory())) {
+      return false;
+    }
+
+    const trackedPath = await this.runGit([
+      "ls-tree",
+      "--name-only",
+      "HEAD",
+      "--",
+      relativePath
+    ]);
+
+    return trackedPath === relativePath;
+  }
+
+  requirePushConfiguration() {
+    const missing = [];
+
+    if (!this.remote) {
+      missing.push("AZURE_GIT_REMOTE");
+    }
+
+    if (!this.pat) {
+      missing.push("AZURE_DEVOPS_PAT");
+    }
+
+    if (!this.shouldPush) {
+      missing.push("AZURE_GIT_PUSH=true");
+    }
+
+    if (missing.length > 0) {
+      throw new ConfigurationError(
+        `Missing Azure push configuration: ${missing.join(", ")}`
+      );
+    }
+  }
+
+  async pushCurrentHead() {
+    this.requirePushConfiguration();
+
+    const pushArguments = ["push"];
+
+    if (this.ipv4Only) {
+      pushArguments.push("--ipv4");
+    }
+
+    pushArguments.push(this.remote, `HEAD:${this.branch}`);
+    await this.runGit(pushArguments);
+  }
+
+  async pushStoredMedia(storedFiles) {
+    this.requirePushConfiguration();
+
+    const pathsToCommit = new Set();
+
+    for (const file of storedFiles) {
+      if (!(await this.isTrackedInHead(file.path))) {
+        pathsToCommit.add(file.path);
+      }
+    }
+
+    const uniquePaths = [...pathsToCommit];
+
+    if (uniquePaths.length > 0) {
+      await this.runGit(["add", "--", ...uniquePaths]);
+
+      const message =
+        uniquePaths.length === 1
+          ? `Add uploaded media ${path.basename(uniquePaths[0])}`
+          : `Add ${uniquePaths.length} uploaded media files`;
+
+      await this.runGit([
+        "commit",
+        "--only",
+        "-m",
+        message,
+        "--",
+        ...uniquePaths
+      ]);
+    }
+
+    const commit = await this.runGit(["rev-parse", "HEAD"]);
+    await this.pushCurrentHead();
+    return commit;
+  }
+
+  async storeMediaFile(file) {
+    const mediaLocation = this.getStorageLocation(
+      file.filename,
+      file.contentType
+    );
+    const { filename, hash } =
+      await this.fileNamingService.createStoredNameForFile(file);
+    const existingFilename = await this.findExistingMedia(
+      hash,
+      mediaLocation.relativeDirectory
+    );
+
+    if (existingFilename) {
+      return {
+        duplicate: true,
+        filename: existingFilename,
+        hash,
+        path: `${mediaLocation.relativeDirectory}/${existingFilename}`
+      };
+    }
+
+    const safeFilename = `${path.basename(
+      filename,
+      path.extname(filename)
+    )}${mediaLocation.extension}`;
+    const absolutePath = path.join(
+      this.dataRepoRoot,
+      mediaLocation.relativeDirectory,
+      safeFilename
+    );
+    const relativePath = this.toGitPath(absolutePath);
+
+    if (Buffer.isBuffer(file.body)) {
+      await fs.writeFile(absolutePath, file.body, { flag: "wx" });
+    } else {
+      await fs.copyFile(
+        file.path,
+        absolutePath,
+        fsConstants.COPYFILE_EXCL
+      );
+    }
+
+    return {
+      duplicate: false,
+      filename: safeFilename,
+      hash,
+      path: relativePath
+    };
+  }
+
+  async saveAndOptionallyPushFiles(files) {
+    if (!Array.isArray(files) || files.length === 0) {
+      throw new ValidationError("No files were supplied");
+    }
+
+    const normalizedFiles = files.map((file) => {
+      const normalized = this.normalizeFile(file);
+      this.getStorageLocation(normalized.filename, normalized.contentType);
+      return normalized;
+    });
+
+    await this.ensureDataRepository();
+
+    const storedFiles = [];
+
+    for (const file of normalizedFiles) {
+      const stored = await this.storeMediaFile(file);
+      storedFiles.push({
+        ...stored,
+        originalName: file.filename,
+        provider: this.key,
+        size: file.size
+      });
+    }
+
+    if (!this.shouldPush) {
+      const completedFiles = storedFiles.map((file) => ({
+        ...file,
+        pushed: false
+      }));
+
+      return {
+        files: completedFiles,
+        images: completedFiles,
+        provider: this.key,
+        pushed: false
+      };
+    }
+
+    const commit = await this.pushStoredMedia(storedFiles);
+    const completedFiles = storedFiles.map((file) => ({
+      ...file,
+      commit,
+      pushed: true
+    }));
+
+    return {
+      commit,
+      files: completedFiles,
+      images: completedFiles,
+      provider: this.key,
+      pushed: true
+    };
+  }
+
+  async saveAndOptionallyPushFile(
+    fileOrBody,
+    originalName,
+    contentType
+  ) {
+    const file = Buffer.isBuffer(fileOrBody)
+      ? {
+          body: fileOrBody,
+          contentType,
+          filename: originalName
+        }
+      : fileOrBody;
+    const result = await this.saveAndOptionallyPushFiles([file]);
+
+    return result.files[0];
+  }
+
+  uploadFile(...argumentsList) {
+    const job = this.operationQueue.then(() =>
+      this.saveAndOptionallyPushFile(...argumentsList)
+    );
+
+    this.operationQueue = job.catch(() => undefined);
+    return job;
+  }
+
+  uploadFiles(files) {
+    const job = this.operationQueue.then(() =>
+      this.saveAndOptionallyPushFiles(files)
+    );
+
+    this.operationQueue = job.catch(() => undefined);
+    return job;
+  }
+
+  async removeLastCommitMedia() {
+    this.requirePushConfiguration();
+    await this.ensureDataRepository();
+
+    if (!(await this.hasCommitHistory())) {
+      throw new ValidationError(
+        "The Azure data repository has no commits"
+      );
+    }
+
+    const sourceCommit = await this.runGit(["rev-parse", "HEAD"]);
+    const output = await this.runGit([
+      "diff-tree",
+      "--root",
+      "--no-commit-id",
+      "--name-only",
+      "--diff-filter=A",
+      "-r",
+      "HEAD",
+      "--",
+      "documents/",
+      "images/",
+      "media/",
+      "source/"
+    ]);
+    const mediaPaths = output
+      .split(/\r?\n/)
+      .filter(
+        (item) =>
+          item.startsWith("documents/") ||
+          item.startsWith("images/") ||
+          item.startsWith("media/") ||
+          item.startsWith("source/")
+      );
+
+    if (mediaPaths.length === 0) {
+      throw new ValidationError(
+        "The last commit did not add any media files"
+      );
+    }
+
+    await this.runGit(["rm", "--", ...mediaPaths]);
+    await this.runGit([
+      "commit",
+      "--only",
+      "-m",
+      `Remove media added by ${sourceCommit.slice(0, 7)}`,
+      "--",
+      ...mediaPaths
+    ]);
+
+    const commit = await this.runGit(["rev-parse", "HEAD"]);
+    await this.pushCurrentHead();
+
+    return {
+      commit,
+      removed: mediaPaths,
+      sourceCommit
+    };
+  }
+
+  removeMediaFromLastCommit() {
+    const job = this.operationQueue.then(() =>
+      this.removeLastCommitMedia()
+    );
+
+    this.operationQueue = job.catch(() => undefined);
+    return job;
+  }
+}
+
+module.exports = {
+  AzureDevOpsStorageProvider,
+  mediaDirectories,
+  mediaExtensions
+};

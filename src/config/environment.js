@@ -1,3 +1,4 @@
+const os = require("node:os");
 const path = require("node:path");
 
 const projectRoot = path.resolve(__dirname, "..", "..");
@@ -34,10 +35,14 @@ function parseNumber(name, fallback, limits = {}) {
 
 loadEnvironmentFile();
 
-const maximumUploadSizeMb = parseNumber("MAX_UPLOAD_SIZE_MB", 50, {
-  maximum: 50,
-  minimum: 1
-});
+const boxMaximumUploadSizeMb = parseNumber(
+  "BOX_MAX_UPLOAD_SIZE_MB",
+  250,
+  {
+    maximum: 500 * 1024,
+    minimum: 1
+  }
+);
 
 const environment = Object.freeze({
   host: process.env.HOST || "127.0.0.1",
@@ -46,14 +51,34 @@ const environment = Object.freeze({
     maximum: 65535,
     minimum: 0
   }),
-  maximumUploadSizeBytes: maximumUploadSizeMb * 1024 * 1024,
-  maximumUploadSizeMb,
   projectRoot,
+  uploadTempDirectory: path.resolve(
+    process.env.UPLOAD_TEMP_DIR ||
+      path.join(os.tmpdir(), "cloud-storage-distributor")
+  ),
+  azure: Object.freeze({
+    branch: process.env.AZURE_GIT_BRANCH || "main",
+    dataRepoRoot: path.resolve(
+      projectRoot,
+      process.env.AZURE_DATA_REPO_DIR || "../AzureDataRepo"
+    ),
+    gitAuthorEmail:
+      process.env.AZURE_GIT_AUTHOR_EMAIL || "media-service@localhost",
+    gitAuthorName:
+      process.env.AZURE_GIT_AUTHOR_NAME || "Cloud Storage Media Service",
+    ipv4Only: process.env.GIT_IPV4_ONLY === "true",
+    maximumUploadSizeBytes: 100 * 1024 * 1024,
+    pat: process.env.AZURE_DEVOPS_PAT,
+    remote: process.env.AZURE_GIT_REMOTE,
+    shouldPush: process.env.AZURE_GIT_PUSH === "true",
+    sslBackend: process.env.GIT_SSL_BACKEND
+  }),
   box: Object.freeze({
     clientId: process.env.BOX_CLIENT_ID,
     clientSecret: process.env.BOX_CLIENT_SECRET,
     enterpriseId: process.env.BOX_ENTERPRISE_ID,
     folderId: process.env.BOX_FOLDER_ID,
+    maximumUploadSizeBytes: boxMaximumUploadSizeMb * 1024 * 1024,
     downloadDirectory: path.resolve(
       projectRoot,
       process.env.BOX_DOWNLOAD_DIR || ".box-downloads"

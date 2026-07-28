@@ -1,6 +1,9 @@
 const {
   ValidationError
 } = require("../../errors/ApplicationError");
+const {
+  AzureDevOpsStorageProvider
+} = require("./azure/AzureDevOpsStorageProvider");
 const { BoxStorageProvider } = require("./box/BoxStorageProvider");
 
 class StorageProviderFactory {
@@ -34,9 +37,23 @@ class StorageProviderFactory {
     return provider;
   }
 
-  list() {
-    return [...this.providers.values()].map((provider) =>
-      provider.getStatus()
+  async list() {
+    return Promise.all(
+      [...this.providers.values()].map(async (provider) => {
+        try {
+          return await provider.getStatus();
+        } catch (error) {
+          return {
+            acceptedFileTypes: provider.acceptedFileTypes,
+            configured: provider.isConfigured(),
+            connectionError: error.message,
+            description: provider.description,
+            displayName: provider.displayName,
+            key: provider.key,
+            maximumUploadSizeBytes: provider.maximumUploadSizeBytes
+          };
+        }
+      })
     );
   }
 }
@@ -44,8 +61,11 @@ class StorageProviderFactory {
 function createStorageProviderFactory(environment) {
   return new StorageProviderFactory([
     new BoxStorageProvider({
-      ...environment.box,
-      maximumUploadSizeBytes: environment.maximumUploadSizeBytes
+      ...environment.box
+    }),
+    new AzureDevOpsStorageProvider({
+      ...environment.azure,
+      codeRepoRoot: environment.projectRoot
     })
   ]);
 }

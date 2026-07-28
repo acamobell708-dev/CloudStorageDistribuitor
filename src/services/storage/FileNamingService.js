@@ -1,5 +1,6 @@
 const path = require("node:path");
 const { createHash } = require("node:crypto");
+const { createReadStream } = require("node:fs");
 
 class FileNamingService {
   createStoredName(fileBody, originalName) {
@@ -10,6 +11,31 @@ class FileNamingService {
       filename: `${hash}-${stem}${extension}`,
       hash
     };
+  }
+
+  async createStoredNameForFile(file) {
+    if (Buffer.isBuffer(file.body)) {
+      return this.createStoredName(file.body, file.filename);
+    }
+
+    const hash = await this.hashFile(file.path, "sha256", "hex");
+    const { extension, stem } = this.sanitizeName(file.filename);
+
+    return {
+      filename: `${hash}-${stem}${extension}`,
+      hash
+    };
+  }
+
+  hashFile(filePath, algorithm, encoding) {
+    return new Promise((resolve, reject) => {
+      const hash = createHash(algorithm);
+      const stream = createReadStream(filePath);
+
+      stream.on("data", (chunk) => hash.update(chunk));
+      stream.on("error", reject);
+      stream.on("end", () => resolve(hash.digest(encoding)));
+    });
   }
 
   sanitizeName(originalName) {

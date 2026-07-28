@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { StorageApiClient } from "./api/StorageApiClient";
-import { FileDropzone } from "./components/FileDropzone";
+import {
+  FileDropzone,
+  formatBytes
+} from "./components/FileDropzone";
 import { Icon } from "./components/Icon";
 import { ProviderPanel } from "./components/ProviderPanel";
 import { UploadResult } from "./components/UploadResult";
@@ -13,18 +16,25 @@ export default function App() {
   const [providers, setProviders] = useState([]);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [providerError, setProviderError] = useState();
+  const [selectedProviderKey, setSelectedProviderKey] = useState("box");
   const [upload, setUpload] = useState({
     error: undefined,
     progress: 0,
     result: undefined,
     status: "idle"
   });
-  const boxProvider = providers.find((provider) => provider.key === "box");
+  const selectedProvider = providers.find(
+    (provider) => provider.key === selectedProviderKey
+  );
   const maximumUploadSizeBytes =
-    boxProvider?.maximumUploadSizeBytes || defaultMaximumUploadSizeBytes;
+    selectedProvider?.maximumUploadSizeBytes ||
+    defaultMaximumUploadSizeBytes;
   const uploading = upload.status === "uploading";
   const canUpload = Boolean(
-    file && boxProvider?.configured && !uploading
+    file &&
+      selectedProvider?.configured &&
+      !selectedProvider?.connectionError &&
+      !uploading
   );
 
   useEffect(() => {
@@ -58,10 +68,12 @@ export default function App() {
     }
 
     if (selectedFile.size > maximumUploadSizeBytes) {
-      const limitMb = maximumUploadSizeBytes / (1024 * 1024);
       setUpload((current) => ({
         ...current,
-        error: `Choose a file that is ${limitMb} MB or smaller`,
+        error:
+          `Choose a file that is ${formatBytes(
+            maximumUploadSizeBytes
+          )} or smaller`,
         status: "error"
       }));
       return;
@@ -86,6 +98,11 @@ export default function App() {
     });
   }
 
+  function selectProvider(providerKey) {
+    setSelectedProviderKey(providerKey);
+    reset();
+  }
+
   async function sendFile() {
     if (!canUpload) {
       return;
@@ -103,7 +120,7 @@ export default function App() {
         file,
         onProgress: (progress) =>
           setUpload((current) => ({ ...current, progress })),
-        provider: "box"
+        provider: selectedProviderKey
       });
 
       setUpload({
@@ -198,8 +215,9 @@ export default function App() {
                 One file. <em>Right where it belongs.</em>
               </h1>
               <p>
-                Send documents, images, spreadsheets, archives and more to your
-                connected Box workspace—without exposing a single credential.
+                Send files to Box or version media in Azure Repos—without
+                exposing a single credential or mixing storage data into this
+                application repository.
               </p>
             </div>
             <div className="hero-stat">
@@ -227,8 +245,46 @@ export default function App() {
                 <UploadResult result={upload.result} onReset={reset} />
               ) : (
                 <>
+                  <label className="provider-select">
+                    <span>Send this file to</span>
+                    <span className="provider-select-control">
+                      <Icon
+                        name={
+                          selectedProviderKey === "azure"
+                            ? "azure"
+                            : "box"
+                        }
+                        size={18}
+                      />
+                      <select
+                        aria-label="Storage provider"
+                        disabled={uploading || providersLoading}
+                        onChange={(event) =>
+                          selectProvider(event.target.value)
+                        }
+                        value={selectedProviderKey}
+                      >
+                        {providers.map((provider) => (
+                          <option key={provider.key} value={provider.key}>
+                            {provider.displayName}
+                            {provider.configured ? "" : " — setup needed"}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="select-chevron">⌄</span>
+                    </span>
+                  </label>
+
                   <FileDropzone
-                    disabled={uploading}
+                    acceptedDescription={
+                      selectedProviderKey === "azure"
+                        ? "Images, audio and video"
+                        : "Documents, media, archives and more"
+                    }
+                    acceptedFileTypes={
+                      selectedProvider?.acceptedFileTypes || ["*/*"]
+                    }
+                    disabled={uploading || providersLoading}
                     file={file}
                     maximumUploadSizeBytes={maximumUploadSizeBytes}
                     onClear={reset}
@@ -265,10 +321,17 @@ export default function App() {
                     </div>
                   )}
 
-                  {!boxProvider?.configured && !providersLoading && (
+                  {(!selectedProvider?.configured ||
+                    selectedProvider?.connectionError) &&
+                    !providersLoading && (
                     <div className="setup-hint">
-                      Add the four <code>BOX_*</code> values to your server
-                      <code>.env</code> file to enable sending.
+                      Configure the server-side{" "}
+                      <code>
+                        {selectedProviderKey === "azure"
+                          ? "AZURE_*"
+                          : "BOX_*"}
+                      </code>{" "}
+                      values in <code>.env</code> to enable this destination.
                     </div>
                   )}
 
@@ -279,7 +342,11 @@ export default function App() {
                     type="button"
                   >
                     <span>
-                      {uploading ? "Sending securely…" : "Send to Box"}
+                      {uploading
+                        ? "Sending securely…"
+                        : `Send to ${
+                            selectedProvider?.displayName || "storage"
+                          }`}
                     </span>
                     <span className="send-button-icon">
                       <Icon name="send" size={18} />
@@ -306,8 +373,10 @@ export default function App() {
 
             <div id="connections">
               <ProviderPanel
-                boxProvider={boxProvider}
                 loading={providersLoading}
+                onSelect={selectProvider}
+                providers={providers}
+                selectedProviderKey={selectedProviderKey}
               />
               <div className="activity-card" id="activity">
                 <div className="activity-icon">
@@ -316,9 +385,9 @@ export default function App() {
                 <div>
                   <strong>Transfer history is ready to grow</strong>
                   <p>
-                    This first release focuses on reliable Box uploads. Browsing,
-                    downloading and cross-provider history fit the same service
-                    structure next.
+                    Box uploads and versioned Azure media now share one secure
+                    transfer path. Browsing, downloads, and unified history fit
+                    the same provider structure next.
                   </p>
                 </div>
                 <Icon name="chevron" size={18} />

@@ -1,23 +1,37 @@
 const { ValidationError } = require("../../errors/ApplicationError");
 
 class StorageProvider {
-  constructor({ key, displayName, maximumUploadSizeBytes }) {
+  constructor({
+    acceptedFileTypes = ["*/*"],
+    description,
+    key,
+    displayName,
+    maximumUploadSizeBytes
+  }) {
     if (new.target === StorageProvider) {
       throw new TypeError("StorageProvider is an abstract class");
     }
 
+    this.acceptedFileTypes = acceptedFileTypes;
+    this.description = description;
     this.key = key;
     this.displayName = displayName;
     this.maximumUploadSizeBytes = maximumUploadSizeBytes;
   }
 
-  getStatus() {
+  async getStatus() {
     return {
+      acceptedFileTypes: this.acceptedFileTypes,
       configured: this.isConfigured(),
+      description: this.description,
       displayName: this.displayName,
       key: this.key,
-      maximumUploadSizeBytes: this.maximumUploadSizeBytes
+      maximumUploadSizeBytes: await this.getMaximumUploadSizeBytes()
     };
+  }
+
+  async getMaximumUploadSizeBytes() {
+    return this.maximumUploadSizeBytes;
   }
 
   isConfigured() {
@@ -26,11 +40,20 @@ class StorageProvider {
 
   normalizeFile(file) {
     const body = file?.body || file?.buffer;
-    const filename = file?.filename || file?.originalname;
+    const filePath = file?.path;
+    // Disk-backed middleware assigns a random temporary filename. Preserve the
+    // browser filename because providers validate and retain its extension.
+    const filename = file?.originalname || file?.filename;
     const contentType =
       file?.contentType || file?.mimetype || "application/octet-stream";
 
-    if (!Buffer.isBuffer(body) || body.length === 0) {
+    const size = Buffer.isBuffer(body) ? body.length : Number(file?.size);
+
+    if (
+      (!Buffer.isBuffer(body) && !filePath) ||
+      !Number.isFinite(size) ||
+      size <= 0
+    ) {
       throw new ValidationError(
         `No file data was supplied for ${filename || "the file"}`
       );
@@ -40,7 +63,7 @@ class StorageProvider {
       throw new ValidationError("The uploaded file must have a filename");
     }
 
-    if (body.length > this.maximumUploadSizeBytes) {
+    if (size > this.maximumUploadSizeBytes) {
       const limitMb = this.maximumUploadSizeBytes / (1024 * 1024);
       throw new ValidationError(
         `${filename} is larger than the ${limitMb} MB upload limit`,
@@ -54,8 +77,9 @@ class StorageProvider {
     return {
       body,
       contentType,
+      path: filePath,
       filename,
-      size: body.length
+      size
     };
   }
 
