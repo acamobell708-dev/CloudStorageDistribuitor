@@ -172,6 +172,27 @@ export default function App() {
               <span>Dashboard</span>
             </a>
           </div>
+          <div className="rail-group">
+            <span className="rail-label">Storage</span>
+            <a
+              aria-disabled="true"
+              className="rail-link"
+              href="#"
+              onClick={(event) => event.preventDefault()}
+            >
+              <Icon name="folder" size={19} />
+              <span>View Files</span>
+            </a>
+            <a
+              aria-disabled="true"
+              className="rail-link"
+              href="#"
+              onClick={(event) => event.preventDefault()}
+            >
+              <Icon name="archive" size={18} />
+              <span>Available storage</span>
+            </a>
+          </div>
           <div className="rail-footer">
             <div className="mini-shield">
               <Icon name="lock" size={17} />

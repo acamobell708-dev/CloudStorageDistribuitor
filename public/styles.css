@@ -207,6 +207,17 @@ a {
   transform: translateX(2px);
 }
 
+.rail-link[aria-disabled="true"] {
+  color: #a7afbd;
+  cursor: not-allowed;
+}
+
+.rail-link[aria-disabled="true"]:hover {
+  color: #a7afbd;
+  background: transparent;
+  transform: none;
+}
+
 .rail-link.is-active {
   color: #1d58d5;
   background: #eaf1ff;
