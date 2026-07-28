@@ -153,44 +153,23 @@ export default function App() {
           </span>
         </a>
         <nav aria-label="Primary navigation">
-          <a className="is-active" href="#send">
-            Send
+          <a className="is-active" href="/">
+            Home
           </a>
-          <a href="#connections">Connections</a>
-          <a href="#activity">Activity</a>
         </nav>
-        <button className="profile-button" type="button" aria-label="Account">
-          AD
-        </button>
       </header>
 
       <div className="workspace">
         <aside className="side-rail" aria-label="Workspace sections">
           <div className="rail-group">
             <span className="rail-label">Workspace</span>
-            <a className="rail-link is-active" href="#send">
+            <a className="rail-link is-active" href="/">
+              <Icon name="upload" size={18} />
+              <span>Upload</span>
+            </a>
+            <a className="rail-link" href="/dashboard.html">
               <Icon name="grid" size={18} />
               <span>Dashboard</span>
-            </a>
-            <a className="rail-link" href="#files">
-              <Icon name="folder" size={19} />
-              <span>My files</span>
-            </a>
-            <a className="rail-link" href="#search">
-              <Icon name="search" size={18} />
-              <span>Search</span>
-            </a>
-            <a className="rail-link" href="#activity">
-              <Icon name="clock" size={18} />
-              <span>Activity</span>
-            </a>
-          </div>
-          <div className="rail-group">
-            <span className="rail-label">Storage</span>
-            <a className="rail-link" href="#connections">
-              <Icon name="archive" size={18} />
-              <span>Connections</span>
-              <span className="rail-count">1</span>
             </a>
           </div>
           <div className="rail-footer">

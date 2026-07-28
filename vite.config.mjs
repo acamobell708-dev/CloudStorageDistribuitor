@@ -15,6 +15,14 @@ export default defineConfig({
   },
   build: {
     outDir: fileURLToPath(new URL("./dist", import.meta.url)),
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        dashboard: fileURLToPath(
+          new URL("./public/dashboard.html", import.meta.url)
+        ),
+        main: fileURLToPath(new URL("./public/index.html", import.meta.url))
+      }
+    }
   }
 });
