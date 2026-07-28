@@ -2,15 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import { StorageApiClient } from "../api/StorageApiClient";
 import { AppShell } from "../components/AppShell";
 import { Icon } from "../components/Icon";
-import { FileList } from "./FileList";
+import { BrowserFileDownloadService } from "./BrowserFileDownloadService";
+import { createFileKey, FileList } from "./FileList";
 import { ProviderSelector } from "./ProviderSelector";
 
-export function ViewFilesApp() {
+export function ManageFilesApp() {
   const apiClient = useMemo(() => new StorageApiClient(), []);
+  const downloadService = useMemo(
+    () => new BrowserFileDownloadService(apiClient),
+    [apiClient]
+  );
   const [files, setFiles] = useState([]);
   const [providers, setProviders] = useState([]);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [selectedProviderKey, setSelectedProviderKey] = useState("box");
+  const [selectedFileKey, setSelectedFileKey] = useState();
   const [refreshCount, setRefreshCount] = useState(0);
   const [listing, setListing] = useState({
     error: undefined,
@@ -90,6 +96,7 @@ export function ViewFilesApp() {
       error: undefined,
       loading: true
     }));
+    setSelectedFileKey(undefined);
 
     apiClient
       .listFiles(selectedProviderKey, {
@@ -131,6 +138,23 @@ export function ViewFilesApp() {
     selectedProviderKey
   ]);
 
+  const selectProvider = (providerKey) => {
+    setSelectedFileKey(undefined);
+    setSelectedProviderKey(providerKey);
+  };
+
+  const selectFile = (file) => {
+    const fileKey = createFileKey(file);
+
+    setSelectedFileKey((currentKey) =>
+      currentKey === fileKey ? undefined : fileKey
+    );
+  };
+
+  const downloadFile = (file) => {
+    downloadService.download(selectedProviderKey, file);
+  };
+
   return (
     <AppShell activePage="files">
       <main className="files-main">
@@ -140,17 +164,17 @@ export function ViewFilesApp() {
               <span />
               Live cloud contents
             </span>
-            <h1>View files</h1>
+            <h1>Manage files</h1>
             <p>
               Choose a provider to read the latest contents directly from its
-              cloud service. Credentials and access tokens remain on the
-              server.
+              cloud service. Select a row to download that file while
+              credentials and access tokens remain on the server.
             </p>
           </div>
 
           <ProviderSelector
             disabled={providersLoading}
-            onSelect={setSelectedProviderKey}
+            onSelect={selectProvider}
             providers={providers}
             selectedProviderKey={selectedProviderKey}
           />
@@ -195,7 +219,10 @@ export function ViewFilesApp() {
           ) : listing.error ? null : (
             <FileList
               files={files}
+              onDownload={downloadFile}
+              onSelect={selectFile}
               providerName={selectedProvider?.displayName || "provider"}
+              selectedFileKey={selectedFileKey}
             />
           )}
         </section>

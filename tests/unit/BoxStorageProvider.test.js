@@ -276,3 +276,40 @@ test("normalizes the current configured Box folder listing", async () => {
   assert.equal(files[0].version, "version-1");
   assert.match(files[0].webUrl, /app\.box\.com\/file\/file-1/);
 });
+
+test("opens a configured-folder Box file as a browser download stream", async () => {
+  const apiClient = createApiClient([
+    {
+      id: "file-1",
+      name:
+        "1b0bb16badd1a75dc3c42d2113250bd6ea5bb84fd1b49174a5316f3e886f6be7-report.txt",
+      parent: {
+        id: "123"
+      },
+      size: 10,
+      type: "file"
+    }
+  ]);
+  apiClient.request = async (url, options) => {
+    apiClient.calls.push({ options, url });
+    return new Response("box report", {
+      headers: {
+        "Content-Length": "10",
+        "Content-Type": "text/plain"
+      }
+    });
+  };
+  const provider = new BoxStorageProvider({
+    accountMaximumUploadSizeBytes: 1024,
+    apiClient,
+    folderId: "123"
+  });
+
+  const download = await provider.downloadCloudFile({ id: "file-1" });
+
+  assert.equal(download.filename, "report.txt");
+  assert.equal(download.contentType, "text/plain");
+  assert.equal(download.size, 10);
+  assert.equal(await new Response(download.body).text(), "box report");
+  assert.match(apiClient.calls[1].url, /files\/file-1\/content/);
+});

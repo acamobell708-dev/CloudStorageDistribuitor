@@ -223,6 +223,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
         ".yaml",
         ".yml"
       ],
+      browserUploadStorage: "memory",
       description: "Versioned documents, source code, images, audio and video",
       displayName: "Azure Repos",
       key: "azure",
@@ -240,10 +241,12 @@ class AzureDevOpsStorageProvider extends StorageProvider {
         pat: options.pat,
         remote: options.remote
       });
+    this.localDataRepositoryEnabled =
+      options.localDataRepositoryEnabled !== false;
     this.codeRepoRoot = options.codeRepoRoot;
-    this.dataRepoRoot = path.resolve(
-      options.dataRepoRoot || ".azure-data-repo"
-    );
+    this.dataRepoRoot = this.localDataRepositoryEnabled
+      ? path.resolve(options.dataRepoRoot || ".azure-data-repo")
+      : undefined;
     this.execFileAsync = options.execFileAsync || defaultExecFileAsync;
     this.fileNamingService =
       options.fileNamingService || new FileNamingService();
@@ -260,6 +263,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     this.operationQueue = Promise.resolve();
 
     if (
+      this.localDataRepositoryEnabled &&
       this.codeRepoRoot &&
       path.resolve(this.codeRepoRoot) === this.dataRepoRoot
     ) {
@@ -366,7 +370,222 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       .sort((first, second) => first.path.localeCompare(second.path));
   }
 
+  async downloadCloudFile(fileReference) {
+    const fileId = String(fileReference?.id || "").trim();
+    const filePath = String(fileReference?.path || "").trim();
+
+    if (!fileId || !filePath) {
+      throw new ValidationError(
+        "An Azure file ID and repository path are required"
+      );
+    }
+
+    const items = await this.apiClient.listRepositoryItems();
+    const item = items.find(
+      (candidate) =>
+        !candidate.isFolder &&
+        String(candidate.gitObjectType || "").toLowerCase() === "blob" &&
+        candidate.objectId === fileId &&
+        candidate.path === filePath
+    );
+
+    if (!item) {
+      throw new ValidationError(
+        "The Azure file is no longer present on the configured branch",
+        {
+          code: "FILE_NOT_FOUND",
+          statusCode: 404
+        }
+      );
+    }
+
+    const response = await this.apiClient.downloadRepositoryItem(item.path);
+    const responseSizeHeader = response.headers.get("content-length");
+    const responseSize =
+      responseSizeHeader === null
+        ? Number.NaN
+        : Number(responseSizeHeader);
+    const itemSize = Number(item.size);
+    const storedName = path.posix.basename(item.path);
+
+    return {
+      body: response.body,
+      contentType:
+        response.headers.get("content-type") ||
+        item.contentMetadata?.contentType ||
+        "application/octet-stream",
+      filename: this.fileNamingService.getDisplayName(storedName),
+      id: item.objectId,
+      path: item.path,
+      provider: this.key,
+      size: Number.isFinite(itemSize)
+        ? itemSize
+        : Number.isFinite(responseSize)
+          ? responseSize
+          : undefined
+    };
+  }
+
+  async uploadFileDirectly(fileOrBody, originalName, contentType) {
+    const file = Buffer.isBuffer(fileOrBody)
+      ? {
+          body: fileOrBody,
+          contentType,
+          filename: originalName
+        }
+      : fileOrBody;
+    const result = await this.uploadFilesDirectly([file]);
+
+    return result.files[0];
+  }
+
+  async uploadFilesDirectly(files) {
+    this.requirePushConfiguration();
+
+    if (!Array.isArray(files) || files.length === 0) {
+      throw new ValidationError("No files were supplied");
+    }
+
+    const normalizedFiles = files.map((file) => {
+      const normalized = this.normalizeFile(file);
+      this.getStorageLocation(normalized.filename, normalized.contentType);
+      return normalized;
+    });
+    const branchReference = await this.apiClient.getBranchReference();
+    const remoteItems = branchReference
+      ? await this.apiClient.listRepositoryItems()
+      : [];
+    const inventory = remoteItems
+      .filter(
+        (item) =>
+          !item.isFolder &&
+          String(item.gitObjectType || "").toLowerCase() === "blob"
+      )
+      .map((item) => ({
+        commitId: item.commitId,
+        filename: path.posix.basename(item.path),
+        objectId: item.objectId,
+        path: item.path,
+        relativeDirectory: path.posix
+          .dirname(item.path)
+          .replace(/^\/+/, "")
+      }));
+    const preparedFiles = [];
+    const changes = [];
+
+    for (const file of normalizedFiles) {
+      const location = this.getStorageLocation(
+        file.filename,
+        file.contentType
+      );
+      const { filename: requestedFilename, hash } =
+        await this.fileNamingService.createStoredNameForFile(file);
+      const gitBlobHash =
+        await this.fileNamingService.createGitBlobHash(file);
+      const directoryInventory = inventory.filter(
+        (item) =>
+          item.relativeDirectory === location.relativeDirectory
+      );
+      const existing = directoryInventory.find(
+        (item) =>
+          item.filename.startsWith(`${hash}-`) ||
+          String(item.objectId || "").toLowerCase() ===
+            gitBlobHash.toLowerCase()
+      );
+
+      if (existing) {
+        preparedFiles.push({
+          commit: existing.commitId,
+          duplicate: true,
+          filename: existing.filename,
+          hash,
+          id: existing.objectId,
+          originalName: file.filename,
+          path: existing.path.replace(/^\/+/, ""),
+          provider: this.key,
+          size: file.size
+        });
+        continue;
+      }
+
+      const filename = this.fileNamingService.createAvailableName(
+        requestedFilename,
+        directoryInventory.map((item) => item.filename)
+      );
+      const safeFilename = `${path.basename(
+        filename,
+        path.extname(filename)
+      )}${location.extension}`;
+      const repositoryPath =
+        `/${location.relativeDirectory}/${safeFilename}`;
+      const body = Buffer.isBuffer(file.body)
+        ? file.body
+        : await fs.readFile(file.path);
+
+      changes.push({
+        content: body,
+        path: repositoryPath
+      });
+      inventory.push({
+        filename: safeFilename,
+        objectId: gitBlobHash,
+        path: repositoryPath,
+        relativeDirectory: location.relativeDirectory
+      });
+      preparedFiles.push({
+        duplicate: false,
+        filename: safeFilename,
+        hash,
+        id: gitBlobHash,
+        originalName: file.filename,
+        path: repositoryPath.replace(/^\/+/, ""),
+        provider: this.key,
+        size: file.size
+      });
+    }
+
+    let commit =
+      branchReference?.objectId ||
+      preparedFiles.find((file) => file.commit)?.commit;
+
+    if (changes.length > 0) {
+      const comment =
+        changes.length === 1
+          ? `Add uploaded file ${path.posix.basename(changes[0].path)}`
+          : `Add ${changes.length} uploaded files`;
+      const push = await this.apiClient.createFilePush({
+        changes,
+        comment,
+        oldObjectId: branchReference?.objectId
+      });
+
+      commit =
+        push?.commits?.[0]?.commitId ||
+        push?.refUpdates?.[0]?.newObjectId;
+
+      if (!commit) {
+        throw new Error("Azure DevOps did not return the created commit");
+      }
+    }
+
+    const completedFiles = preparedFiles.map((file) => ({
+      ...file,
+      commit: file.commit || commit,
+      pushed: true
+    }));
+
+    return {
+      commit,
+      files: completedFiles,
+      images: completedFiles,
+      provider: this.key,
+      pushed: true
+    };
+  }
+
   async runGit(argumentsList) {
+    this.requireLocalDataRepository();
+
     const configurationArguments = ["-c", "credential.helper="];
     const processEnvironment = {
       ...process.env,
@@ -410,6 +629,14 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       return stdout.trim();
     } catch (error) {
       throw new Error(error.stderr?.trim() || error.message);
+    }
+  }
+
+  requireLocalDataRepository() {
+    if (!this.localDataRepositoryEnabled) {
+      throw new ConfigurationError(
+        "The local Azure data repository is disabled for web providers"
+      );
     }
   }
 
@@ -463,6 +690,8 @@ class AzureDevOpsStorageProvider extends StorageProvider {
   }
 
   async ensureDataRepository() {
+    this.requireLocalDataRepository();
+
     if (!this.dataRepositoryReady) {
       this.dataRepositoryReady = (async () => {
         await fs.mkdir(this.dataRepoRoot, { recursive: true });
@@ -500,6 +729,8 @@ class AzureDevOpsStorageProvider extends StorageProvider {
   }
 
   async getStoredMediaInventory(relativeDirectory) {
+    this.requireLocalDataRepository();
+
     const directory = path.join(this.dataRepoRoot, relativeDirectory);
     const inventory = new Map();
 
@@ -684,6 +915,8 @@ class AzureDevOpsStorageProvider extends StorageProvider {
   }
 
   async storeMediaFile(file) {
+    this.requireLocalDataRepository();
+
     const mediaLocation = this.getStorageLocation(
       file.filename,
       file.contentType
@@ -742,6 +975,8 @@ class AzureDevOpsStorageProvider extends StorageProvider {
   }
 
   async saveAndOptionallyPushFiles(files) {
+    this.requireLocalDataRepository();
+
     if (!Array.isArray(files) || files.length === 0) {
       throw new ValidationError("No files were supplied");
     }
@@ -815,7 +1050,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
 
   uploadFile(...argumentsList) {
     const job = this.operationQueue.then(() =>
-      this.saveAndOptionallyPushFile(...argumentsList)
+      this.uploadFileDirectly(...argumentsList)
     );
 
     this.operationQueue = job.catch(() => undefined);
@@ -824,7 +1059,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
 
   uploadFiles(files) {
     const job = this.operationQueue.then(() =>
-      this.saveAndOptionallyPushFiles(files)
+      this.uploadFilesDirectly(files)
     );
 
     this.operationQueue = job.catch(() => undefined);

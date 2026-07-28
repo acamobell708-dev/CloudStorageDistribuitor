@@ -3,6 +3,7 @@ const { ValidationError } = require("../../errors/ApplicationError");
 class StorageProvider {
   constructor({
     acceptedFileTypes = ["*/*"],
+    browserUploadStorage = "disk",
     description,
     key,
     displayName,
@@ -13,6 +14,7 @@ class StorageProvider {
     }
 
     this.acceptedFileTypes = acceptedFileTypes;
+    this.browserUploadStorage = browserUploadStorage;
     this.description = description;
     this.key = key;
     this.displayName = displayName;
@@ -95,6 +97,12 @@ class StorageProvider {
   async listCloudFiles() {
     throw new Error(
       `${this.displayName} does not implement listCloudFiles()`
+    );
+  }
+
+  async downloadCloudFile() {
+    throw new Error(
+      `${this.displayName} does not implement downloadCloudFile()`
     );
   }
 }

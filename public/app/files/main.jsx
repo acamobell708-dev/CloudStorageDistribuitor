@@ -1,11 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { ViewFilesApp } from "./ViewFilesApp";
+import { ManageFilesApp } from "./ManageFilesApp";
 import "../../styles.css";
-import "../../view-files.css";
+import "../../manage-files.css";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
-    <ViewFilesApp />
+    <ManageFilesApp />
   </StrictMode>
 );

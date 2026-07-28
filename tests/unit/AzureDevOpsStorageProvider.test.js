@@ -85,16 +85,31 @@ test("rejects unsupported and mismatched file extensions", () => {
 });
 
 test("returns a versioned Azure result through the common upload contract", async () => {
-  const provider = createProvider();
+  let pushedChange;
+  const apiClient = {
+    createFilePush: async ({ changes, oldObjectId }) => {
+      assert.equal(oldObjectId, "previous-commit");
+      [pushedChange] = changes;
 
-  provider.ensureDataRepository = async () => undefined;
-  provider.storeMediaFile = async (file) => ({
-    duplicate: false,
-    filename: "hash-clip.mp4",
-    hash: "hash",
-    path: "media/video/hash-clip.mp4"
+      return {
+        commits: [
+          {
+            commitId: "abcdef1234567890"
+          }
+        ]
+      };
+    },
+    getBranchReference: async () => ({
+      name: "refs/heads/main",
+      objectId: "previous-commit"
+    }),
+    isConfigured: () => true,
+    listRepositoryItems: async () => []
+  };
+  const provider = createProvider({
+    apiClient,
+    localDataRepositoryEnabled: false
   });
-  provider.pushStoredMedia = async () => "abcdef1234567890";
 
   const result = await provider.uploadFile(
     Buffer.from("video"),
@@ -103,9 +118,11 @@ test("returns a versioned Azure result through the common upload contract", asyn
   );
 
   assert.equal(result.provider, "azure");
-  assert.equal(result.path, "media/video/hash-clip.mp4");
+  assert.equal(result.path, "media/video/clip.mp4");
   assert.equal(result.commit, "abcdef1234567890");
   assert.equal(result.pushed, true);
+  assert.equal(pushedChange.path, "/media/video/clip.mp4");
+  assert.deepEqual(pushedChange.content, Buffer.from("video"));
 });
 
 test("normalizes files returned by the remote Azure listing client", async () => {
@@ -150,6 +167,55 @@ test("normalizes files returned by the remote Azure listing client", async () =>
   assert.equal(files[0].version, "commit-123");
 });
 
+test("downloads only a file present on the configured Azure branch", async () => {
+  const apiClient = {
+    downloadRepositoryItem: async (filePath) => {
+      assert.equal(filePath, "/documents/report.txt");
+      return new Response("azure report", {
+        headers: {
+          "Content-Length": "12",
+          "Content-Type": "text/plain"
+        }
+      });
+    },
+    isConfigured: () => true,
+    listRepositoryItems: async () => [
+      {
+        contentMetadata: {
+          contentType: "text/plain"
+        },
+        gitObjectType: "blob",
+        isFolder: false,
+        objectId: "blob-123",
+        path: "/documents/report.txt",
+        size: 12
+      }
+    ]
+  };
+  const provider = createProvider({ apiClient });
+  const download = await provider.downloadCloudFile({
+    id: "blob-123",
+    path: "/documents/report.txt"
+  });
+
+  assert.equal(download.filename, "report.txt");
+  assert.equal(download.contentType, "text/plain");
+  assert.equal(download.size, 12);
+  assert.equal(
+    await new Response(download.body).text(),
+    "azure report"
+  );
+
+  await assert.rejects(
+    provider.downloadCloudFile({
+      id: "different-blob",
+      path: "/documents/report.txt"
+    }),
+    (error) =>
+      error.code === "FILE_NOT_FOUND" && error.statusCode === 404
+  );
+});
+
 test("detects an Azure duplicate from the current remote Git blob", async () => {
   const body = Buffer.from("remote image");
   const objectId = createHash("sha1")
@@ -158,6 +224,10 @@ test("detects an Azure duplicate from the current remote Git blob", async () => 
     .digest("hex");
   const apiClient = {
     createFileWebUrl: () => "https://azure.test/file",
+    getBranchReference: async () => ({
+      name: "refs/heads/main",
+      objectId: "remote-commit"
+    }),
     isConfigured: () => true,
     listRepositoryItems: async () => [
       {
@@ -171,8 +241,6 @@ test("detects an Azure duplicate from the current remote Git blob", async () => 
   };
   const provider = createProvider({ apiClient });
 
-  provider.ensureDataRepository = async () => undefined;
-
   const result = await provider.uploadFile(
     body,
     "photo.png",
@@ -185,6 +253,50 @@ test("detects an Azure duplicate from the current remote Git blob", async () => 
   assert.equal(result.commit, "remote-commit");
 });
 
+test("uses a readable remote filename when Azure already has that name", async () => {
+  let pushedPath;
+  const apiClient = {
+    createFilePush: async ({ changes }) => {
+      pushedPath = changes[0].path;
+      return {
+        commits: [
+          {
+            commitId: "new-commit"
+          }
+        ]
+      };
+    },
+    getBranchReference: async () => ({
+      name: "refs/heads/main",
+      objectId: "remote-commit"
+    }),
+    isConfigured: () => true,
+    listRepositoryItems: async () => [
+      {
+        commitId: "remote-commit",
+        gitObjectType: "blob",
+        isFolder: false,
+        objectId: "different-blob",
+        path: "/images/photo.png"
+      }
+    ]
+  };
+  const provider = createProvider({
+    apiClient,
+    localDataRepositoryEnabled: false
+  });
+
+  const result = await provider.uploadFile(
+    Buffer.from("new image"),
+    "photo.png",
+    "image/png"
+  );
+
+  assert.equal(result.filename, "photo (2).png");
+  assert.equal(result.path, "images/photo (2).png");
+  assert.equal(pushedPath, "/images/photo (2).png");
+});
+
 test("refuses to use the application repository as Azure data storage", () => {
   const applicationRoot = path.resolve("application-root");
 
@@ -195,5 +307,21 @@ test("refuses to use the application repository as Azure data storage", () => {
         dataRepoRoot: applicationRoot
       }),
     /must not be the application repository/
+  );
+});
+
+test("blocks local repository methods when configured as a web provider", async () => {
+  const provider = createProvider({
+    localDataRepositoryEnabled: false
+  });
+
+  assert.equal(provider.dataRepoRoot, undefined);
+  await assert.rejects(
+    provider.saveAndOptionallyPushFile(
+      Buffer.from("image"),
+      "photo.png",
+      "image/png"
+    ),
+    /local Azure data repository is disabled for web providers/
   );
 });

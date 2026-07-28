@@ -12,21 +12,28 @@ function createProviderUploadMiddleware({
       const provider = providerFactory.get(request.params.provider);
       const maximumUploadSizeBytes =
         await provider.getMaximumUploadSizeBytes();
-      const upload = multer({
-        dest:
-          uploadTempDirectory ||
-          path.join(os.tmpdir(), "cloud-storage-distributor"),
+      const uploadOptions = {
         limits: {
           fileSize: maximumUploadSizeBytes,
           files: 1,
           fields: 0,
           parts: 2
         }
-      }).single("file");
+      };
+
+      if (provider.browserUploadStorage === "memory") {
+        uploadOptions.storage = multer.memoryStorage();
+      } else {
+        uploadOptions.dest =
+          uploadTempDirectory ||
+          path.join(os.tmpdir(), "cloud-storage-distributor");
+      }
+
+      const upload = multer(uploadOptions).single("file");
 
       upload(request, response, (error) => {
         if (request.file) {
-          request.file.temporary = true;
+          request.file.temporary = Boolean(request.file.path);
         }
 
         next(error);
@@ -50,6 +57,10 @@ function createStorageRoutes({
 
   router.get("/providers", controller.listProviders);
   router.get("/:provider/files", controller.listFiles);
+  router.get(
+    "/:provider/files/:fileId/download",
+    controller.downloadFile
+  );
   router.post(
     "/:provider/files",
     uploadFile,

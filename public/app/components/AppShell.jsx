@@ -22,10 +22,10 @@ const navigationSections = [
     label: "Storage",
     links: [
       {
-        href: "/viewFiles.html",
+        href: "/manageFiles.html",
         icon: "folder",
         key: "files",
-        label: "View Files"
+        label: "Manage Files"
       },
       {
         disabled: true,

@@ -70,3 +70,118 @@ test("lists the latest remote branch through the Azure DevOps REST API", async (
   );
   assert.equal(calls[0].url.includes("secret-pat"), false);
 });
+
+test("opens a current-branch Azure item as a download stream", async () => {
+  const calls = [];
+  const client = new AzureDevOpsApiClient({
+    branch: "uploads",
+    fetch: async (url, options) => {
+      calls.push({ options, url });
+      return new Response("file contents", {
+        headers: {
+          "Content-Length": "13",
+          "Content-Type": "text/plain"
+        },
+        status: 200
+      });
+    },
+    pat: "secret-pat",
+    remote:
+      "https://organization@dev.azure.com/organization/project/_git/media"
+  });
+
+  const response = await client.downloadRepositoryItem(
+    "/source/example.js"
+  );
+  const requestUrl = new URL(calls[0].url);
+
+  assert.equal(await response.text(), "file contents");
+  assert.equal(requestUrl.searchParams.get("path"), "/source/example.js");
+  assert.equal(requestUrl.searchParams.get("download"), "true");
+  assert.equal(requestUrl.searchParams.get("$format"), "octetStream");
+  assert.equal(
+    requestUrl.searchParams.get("versionDescriptor.version"),
+    "uploads"
+  );
+  assert.equal(
+    calls[0].options.headers.Accept,
+    "application/octet-stream"
+  );
+});
+
+test("reads the configured Azure branch reference", async () => {
+  const calls = [];
+  const client = new AzureDevOpsApiClient({
+    branch: "uploads",
+    fetch: async (url, options) => {
+      calls.push({ options, url });
+      return Response.json({
+        value: [
+          {
+            name: "refs/heads/uploads",
+            objectId: "current-commit"
+          }
+        ]
+      });
+    },
+    pat: "secret-pat",
+    remote:
+      "https://organization@dev.azure.com/organization/project/_git/media"
+  });
+
+  const reference = await client.getBranchReference();
+  const requestUrl = new URL(calls[0].url);
+
+  assert.equal(reference.objectId, "current-commit");
+  assert.equal(requestUrl.searchParams.get("filter"), "heads/uploads");
+  assert.match(requestUrl.pathname, /\/refs$/);
+});
+
+test("creates a remote Azure Git push with base64 file content", async () => {
+  const calls = [];
+  const client = new AzureDevOpsApiClient({
+    branch: "main",
+    fetch: async (url, options) => {
+      calls.push({ options, url });
+      return Response.json(
+        {
+          commits: [
+            {
+              commitId: "created-commit"
+            }
+          ]
+        },
+        { status: 201 }
+      );
+    },
+    pat: "secret-pat",
+    remote:
+      "https://organization@dev.azure.com/organization/project/_git/media"
+  });
+
+  const result = await client.createFilePush({
+    changes: [
+      {
+        content: Buffer.from("binary contents"),
+        path: "/documents/report.pdf"
+      }
+    ],
+    comment: "Add uploaded file report.pdf",
+    oldObjectId: "previous-commit"
+  });
+  const body = JSON.parse(calls[0].options.body);
+
+  assert.equal(result.commits[0].commitId, "created-commit");
+  assert.equal(calls[0].options.method, "POST");
+  assert.match(calls[0].url, /\/pushes\?/);
+  assert.equal(body.refUpdates[0].name, "refs/heads/main");
+  assert.equal(body.refUpdates[0].oldObjectId, "previous-commit");
+  assert.equal(
+    body.commits[0].changes[0].newContent.content,
+    Buffer.from("binary contents").toString("base64")
+  );
+  assert.equal(
+    body.commits[0].changes[0].newContent.contentType,
+    "base64Encoded"
+  );
+});

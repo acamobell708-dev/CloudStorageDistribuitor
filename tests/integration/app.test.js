@@ -9,6 +9,7 @@ function createTestApplication(overrides = {}) {
       key === "azure"
         ? ["image/*", "audio/*", "video/*"]
         : ["*/*"],
+    browserUploadStorage: key === "azure" ? "memory" : "disk",
     description: `${displayName} test provider`,
     displayName,
     getMaximumUploadSizeBytes: async () =>
@@ -29,6 +30,18 @@ function createTestApplication(overrides = {}) {
     isConfigured: () => true,
     isListingConfigured: () => true,
     key,
+    downloadCloudFile: async (fileReference) => {
+      const body = Buffer.from(`${key}-download`);
+
+      return {
+        body,
+        contentType: "text/plain",
+        filename: `${key}-file.txt`,
+        id: fileReference.id,
+        provider: key,
+        size: body.length
+      };
+    },
     listCloudFiles: async () => [
       {
         id: `${key}-file-1`,
@@ -42,16 +55,20 @@ function createTestApplication(overrides = {}) {
     ],
     maximumUploadSizeBytes:
       overrides.maximumUploadSizeBytes || 1024,
-    uploadFile: async (file) => ({
-      duplicate: false,
-      filename: `stored-${file.originalname}`,
-      id: key === "box" ? "box-file-1" : undefined,
-      originalName: file.originalname,
-      path: key === "azure" ? "images/stored-file.png" : undefined,
-      provider: key,
-      pushed: true,
-      size: file.size
-    })
+    uploadFile: async (file) => {
+      overrides.onUpload?.(key, file);
+
+      return {
+        duplicate: false,
+        filename: `stored-${file.originalname}`,
+        id: key === "box" ? "box-file-1" : undefined,
+        originalName: file.originalname,
+        path: key === "azure" ? "images/stored-file.png" : undefined,
+        provider: key,
+        pushed: true,
+        size: file.size
+      };
+    }
   });
   const providers = new Map([
     ["box", createProvider("box", "Box")],
@@ -106,7 +123,16 @@ test("reports API health and configured storage providers", async () => {
 });
 
 test("routes a media upload to the selected Azure provider", async () => {
-  await withServer(createTestApplication(), async (baseUrl) => {
+  let receivedFile;
+  const app = createTestApplication({
+    onUpload: (providerKey, file) => {
+      if (providerKey === "azure") {
+        receivedFile = file;
+      }
+    }
+  });
+
+  await withServer(app, async (baseUrl) => {
     const form = new FormData();
     form.append(
       "file",
@@ -124,6 +150,9 @@ test("routes a media upload to the selected Azure provider", async () => {
     assert.equal(body.file.provider, "azure");
     assert.equal(body.file.path, "images/stored-file.png");
     assert.equal(body.message, "photo.png was sent to Azure Repos");
+    assert.equal(Buffer.isBuffer(receivedFile.buffer), true);
+    assert.equal(receivedFile.path, undefined);
+    assert.equal(receivedFile.temporary, false);
   });
 });
 
@@ -140,6 +169,23 @@ test("lists current cloud files through the selected provider", async () => {
     assert.equal(body.files.length, 1);
     assert.equal(body.files[0].name, "azure-file.txt");
     assert.match(body.refreshedAt, /^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+test("streams a selected cloud file to the browser as an attachment", async () => {
+  await withServer(createTestApplication(), async (baseUrl) => {
+    const response = await fetch(
+      `${baseUrl}/api/storage/azure/files/azure-file-1/download?` +
+        new URLSearchParams({ path: "/azure-file.txt" })
+    );
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /^text\/plain/);
+    assert.match(
+      response.headers.get("content-disposition"),
+      /attachment; filename="azure-file\.txt"/
+    );
+    assert.equal(await response.text(), "azure-download");
   });
 });
 

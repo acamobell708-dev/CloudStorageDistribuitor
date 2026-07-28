@@ -45,7 +45,7 @@ function errorHandler(error, request, response, next) {
   response.status(500).json({
     error: {
       code: "INTERNAL_SERVER_ERROR",
-      message: "The upload could not be completed"
+      message: "The request could not be completed"
     }
   });
 }

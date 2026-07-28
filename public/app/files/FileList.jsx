@@ -26,7 +26,29 @@ function formatVersion(value) {
   return value.length > 12 ? value.slice(0, 12) : value;
 }
 
-export function FileList({ files, providerName }) {
+export function createFileKey(file) {
+  return JSON.stringify([file.provider, file.id, file.path]);
+}
+
+function handleRowKeyDown(event, file, onSelect) {
+  if (
+    event.target !== event.currentTarget ||
+    !["Enter", " "].includes(event.key)
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  onSelect(file);
+}
+
+export function FileList({
+  files,
+  onDownload,
+  onSelect,
+  providerName,
+  selectedFileKey
+}) {
   if (files.length === 0) {
     return (
       <div className="files-empty">
@@ -44,7 +66,7 @@ export function FileList({ files, providerName }) {
 
   return (
     <div className="file-table-wrap">
-      <table className="file-table">
+      <table className="file-table" aria-label={`${providerName} files`}>
         <thead>
           <tr>
             <th scope="col">File</th>
@@ -55,43 +77,65 @@ export function FileList({ files, providerName }) {
           </tr>
         </thead>
         <tbody>
-          {files.map((file) => (
-            <tr key={`${file.provider}-${file.id || file.path}`}>
-              <td data-label="File">
-                <span className="file-type-icon">
-                  <Icon name="document" size={18} />
-                </span>
-                <span className="listed-file-name">
-                  {file.webUrl ? (
-                    <a
-                      href={file.webUrl}
-                      rel="noreferrer"
-                      target="_blank"
-                      title={`Open ${file.name} in ${providerName}`}
+          {files.map((file) => {
+            const fileKey = createFileKey(file);
+            const selected = selectedFileKey === fileKey;
+
+            return (
+              <tr
+                aria-selected={selected}
+                className={`file-row${selected ? " is-selected" : ""}`}
+                key={fileKey}
+                onClick={() => onSelect(file)}
+                onKeyDown={(event) =>
+                  handleRowKeyDown(event, file, onSelect)
+                }
+                tabIndex="0"
+                title={
+                  selected
+                    ? `Download ${file.name}`
+                    : `Select ${file.name}`
+                }
+              >
+                <td data-label="File">
+                  <span className="file-type-icon">
+                    <Icon name="document" size={18} />
+                  </span>
+                  <span className="listed-file-name">
+                    {file.name}
+                  </span>
+                  {selected && (
+                    <button
+                      aria-label={`Download ${file.name}`}
+                      className="file-download-button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDownload(file);
+                      }}
+                      type="button"
                     >
-                      {file.name}
-                    </a>
-                  ) : (
-                    file.name
+                      <Icon name="download" size={16} />
+                      Download File
+                    </button>
                   )}
-                </span>
-              </td>
-              <td data-label="Location" title={file.path}>
-                <code>{file.path}</code>
-              </td>
-              <td data-label="Size">
-                {Number.isFinite(file.size)
-                  ? formatBytes(file.size)
-                  : "Not supplied"}
-              </td>
-              <td data-label="Updated">{formatDate(file.modifiedAt)}</td>
-              <td data-label="Version">
-                <code title={file.version}>
-                  {formatVersion(file.version)}
-                </code>
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td data-label="Location" title={file.path}>
+                  <code>{file.path}</code>
+                </td>
+                <td data-label="Size">
+                  {Number.isFinite(file.size)
+                    ? formatBytes(file.size)
+                    : "Not supplied"}
+                </td>
+                <td data-label="Updated">{formatDate(file.modifiedAt)}</td>
+                <td data-label="Version">
+                  <code title={file.version}>
+                    {formatVersion(file.version)}
+                  </code>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

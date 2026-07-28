@@ -7,7 +7,7 @@ const {
   AzureDevOpsStorageProvider
 } = require("../../src/services/storage/azure/AzureDevOpsStorageProvider");
 
-test("stores Azure files using original upload names in its isolated Git directory", async () => {
+test("retains isolated AzureDataRepo storage for explicit CLI operations", async () => {
   const temporaryRoot = await fs.mkdtemp(
     path.join(os.tmpdir(), "cloud-storage-azure-test-")
   );
@@ -41,35 +41,35 @@ test("stores Azure files using original upload names in its isolated Git directo
       dataRepoRoot,
       shouldPush: false
     });
-    const firstUpload = await provider.uploadFile({
+    const firstUpload = await provider.saveAndOptionallyPushFile({
       filename: "random-image-upload",
       mimetype: "image/png",
       originalname: "photo.png",
       path: imageUploadPath,
       size: imageBody.length
     });
-    const duplicateUpload = await provider.uploadFile({
+    const duplicateUpload = await provider.saveAndOptionallyPushFile({
       filename: "another-random-name",
       mimetype: "image/png",
       originalname: "photo.png",
       path: imageUploadPath,
       size: imageBody.length
     });
-    const documentUpload = await provider.uploadFile({
+    const documentUpload = await provider.saveAndOptionallyPushFile({
       filename: "random-document-upload",
       mimetype: "application/pdf",
       originalname: "report.pdf",
       path: documentUploadPath,
       size: documentBody.length
     });
-    const sourceUpload = await provider.uploadFile({
+    const sourceUpload = await provider.saveAndOptionallyPushFile({
       filename: "random-source-upload",
       mimetype: "application/javascript",
       originalname: "app.js",
       path: sourceUploadPath,
       size: sourceBody.length
     });
-    const collisionUpload = await provider.uploadFile({
+    const collisionUpload = await provider.saveAndOptionallyPushFile({
       filename: "random-collision-upload",
       mimetype: "image/png",
       originalname: "photo.png",

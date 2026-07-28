@@ -144,6 +144,38 @@ class BoxStorageProvider extends StorageProvider {
       .sort((first, second) => first.name.localeCompare(second.name));
   }
 
+  async downloadCloudFile(fileReference) {
+    const fileId = String(fileReference?.id || "").trim();
+    const file = await this.getFileInfo(fileId);
+    this.requireFileInConfiguredFolder(file);
+
+    const response = await this.apiClient.request(
+      `${this.apiClient.apiUrl}/files/${encodeURIComponent(fileId)}/content`,
+      { action: `Downloading Box file ${fileId}` }
+    );
+    const responseSizeHeader = response.headers.get("content-length");
+    const responseSize =
+      responseSizeHeader === null
+        ? Number.NaN
+        : Number(responseSizeHeader);
+    const fileSize = Number(file.size);
+
+    return {
+      body: response.body,
+      contentType:
+        response.headers.get("content-type") ||
+        "application/octet-stream",
+      filename: this.fileNamingService.getDisplayName(file.name),
+      id: file.id,
+      provider: this.key,
+      size: Number.isFinite(fileSize)
+        ? fileSize
+        : Number.isFinite(responseSize)
+          ? responseSize
+          : undefined
+    };
+  }
+
   async getFileInfo(fileId) {
     this.requireConfiguration();
 

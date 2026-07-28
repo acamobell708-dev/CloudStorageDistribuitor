@@ -48,6 +48,23 @@ export class StorageApiClient {
     return body;
   }
 
+  getFileDownloadUrl(provider, file) {
+    const providerKey = encodeURIComponent(provider);
+    const fileId = encodeURIComponent(file?.id || "");
+    const query = new URLSearchParams();
+
+    if (file?.path) {
+      query.set("path", file.path);
+    }
+
+    const queryString = query.toString();
+
+    return (
+      `${this.baseUrl}/storage/${providerKey}/files/${fileId}/download` +
+      (queryString ? `?${queryString}` : "")
+    );
+  }
+
   uploadFile({ file, onProgress, provider = "box" }) {
     return new Promise((resolve, reject) => {
       const request = new XMLHttpRequest();

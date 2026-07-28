@@ -3,19 +3,20 @@ const {
   AzureDevOpsStorageProvider
 } = require("../src/services/storage/azure/AzureDevOpsStorageProvider");
 
-// Preserve the original CLI exports while exercising the same isolated Azure
-// data-repository implementation used by the web API.
+// CLI tests deliberately retain the isolated local Git workflow. The web
+// provider uses Azure's REST API and has local repository access disabled.
 const provider = new AzureDevOpsStorageProvider({
   ...environment.azure,
+  ...environment.azureCli,
   codeRepoRoot: environment.projectRoot
 });
 
 const removeImagesFromLastCommit = (...argumentsList) =>
   provider.removeMediaFromLastCommit(...argumentsList);
 const uploadImage = (...argumentsList) =>
-  provider.uploadFile(...argumentsList);
+  provider.saveAndOptionallyPushFile(...argumentsList);
 const uploadImages = (...argumentsList) =>
-  provider.uploadFiles(...argumentsList);
+  provider.saveAndOptionallyPushFiles(...argumentsList);
 
 module.exports = {
   removeImagesFromLastCommit,

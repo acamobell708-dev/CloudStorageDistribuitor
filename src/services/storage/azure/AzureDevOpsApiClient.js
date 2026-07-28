@@ -17,7 +17,7 @@ function parseAzureRemoteUrl(remote) {
 
   if (url.protocol !== "https:") {
     throw new ConfigurationError(
-      "AZURE_GIT_REMOTE must use HTTPS for cloud file listings"
+      "AZURE_GIT_REMOTE must use HTTPS for cloud operations"
     );
   }
 
@@ -112,7 +112,7 @@ class AzureDevOpsApiClient {
 
     if (missing.length > 0) {
       throw new ConfigurationError(
-        `Missing Azure listing configuration: ${missing.join(", ")}`
+        `Missing Azure cloud configuration: ${missing.join(", ")}`
       );
     }
   }
@@ -127,7 +127,7 @@ class AzureDevOpsApiClient {
     return this.repositoryDetails;
   }
 
-  async requestJson(url, options = {}) {
+  async request(url, options = {}) {
     this.requireConfiguration();
     const { action, ...fetchOptions } = options;
     const encodedPat = Buffer.from(`:${this.pat}`).toString("base64");
@@ -149,16 +149,8 @@ class AzureDevOpsApiClient {
       );
     }
 
-    const text = await response.text();
-    let body;
-
-    try {
-      body = text ? JSON.parse(text) : undefined;
-    } catch {
-      body = text;
-    }
-
     if (!response.ok) {
+      const body = await this.readResponseBody(response);
       const message =
         (typeof body === "object" && body?.message) ||
         (typeof body === "string" && body) ||
@@ -175,7 +167,26 @@ class AzureDevOpsApiClient {
       );
     }
 
-    return body;
+    return response;
+  }
+
+  async requestJson(url, options = {}) {
+    const response = await this.request(url, options);
+    return this.readResponseBody(response);
+  }
+
+  async readResponseBody(response) {
+    const text = await response.text();
+
+    if (!text) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
   }
 
   async listRepositoryItems() {
@@ -198,6 +209,93 @@ class AzureDevOpsApiClient {
     );
 
     return Array.isArray(result?.value) ? result.value : [];
+  }
+
+  async getBranchReference() {
+    const { apiBaseUrl } = this.getRepositoryDetails();
+    const referenceName = `refs/heads/${this.branch}`;
+    const query = new URLSearchParams({
+      "api-version": "7.1",
+      filter: `heads/${this.branch}`
+    });
+    const result = await this.requestJson(
+      `${apiBaseUrl}/refs?${query}`,
+      {
+        action: `Reading the latest ${this.branch} branch reference`
+      }
+    );
+
+    return (result?.value || []).find(
+      (reference) => reference.name === referenceName
+    );
+  }
+
+  async createFilePush({
+    changes,
+    comment,
+    oldObjectId =
+      "0000000000000000000000000000000000000000"
+  }) {
+    if (!Array.isArray(changes) || changes.length === 0) {
+      throw new TypeError("At least one Azure file change is required");
+    }
+
+    const { apiBaseUrl } = this.getRepositoryDetails();
+    const query = new URLSearchParams({
+      "api-version": "7.1"
+    });
+    const body = {
+      commits: [
+        {
+          changes: changes.map((change) => ({
+            changeType: "add",
+            item: {
+              path: change.path
+            },
+            newContent: {
+              content: change.content.toString("base64"),
+              contentType: "base64Encoded"
+            }
+          })),
+          comment
+        }
+      ],
+      refUpdates: [
+        {
+          name: `refs/heads/${this.branch}`,
+          oldObjectId
+        }
+      ]
+    };
+
+    return this.requestJson(`${apiBaseUrl}/pushes?${query}`, {
+      action: `Pushing ${changes.length} file(s) to ${this.branch}`,
+      body: JSON.stringify(body),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+  }
+
+  async downloadRepositoryItem(filePath) {
+    const { apiBaseUrl } = this.getRepositoryDetails();
+    const query = new URLSearchParams({
+      "$format": "octetStream",
+      "api-version": "7.1",
+      download: "true",
+      path: filePath,
+      "versionDescriptor.version": this.branch,
+      "versionDescriptor.versionType": "branch"
+    });
+
+    return this.request(`${apiBaseUrl}/items?${query}`, {
+      action:
+        `Downloading ${filePath} from the latest ${this.branch} branch`,
+      headers: {
+        Accept: "application/octet-stream"
+      }
+    });
   }
 
   createFileWebUrl(filePath) {

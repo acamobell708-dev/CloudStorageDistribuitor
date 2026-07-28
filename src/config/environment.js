@@ -58,6 +58,13 @@ const environment = Object.freeze({
   ),
   azure: Object.freeze({
     branch: process.env.AZURE_GIT_BRANCH || "main",
+    ipv4Only: process.env.GIT_IPV4_ONLY === "true",
+    maximumUploadSizeBytes: 100 * 1024 * 1024,
+    pat: process.env.AZURE_DEVOPS_PAT,
+    remote: process.env.AZURE_GIT_REMOTE,
+    shouldPush: process.env.AZURE_GIT_PUSH === "true"
+  }),
+  azureCli: Object.freeze({
     dataRepoRoot: path.resolve(
       projectRoot,
       process.env.AZURE_DATA_REPO_DIR || "../AzureDataRepo"
@@ -66,11 +73,6 @@ const environment = Object.freeze({
       process.env.AZURE_GIT_AUTHOR_EMAIL || "media-service@localhost",
     gitAuthorName:
       process.env.AZURE_GIT_AUTHOR_NAME || "Cloud Storage Media Service",
-    ipv4Only: process.env.GIT_IPV4_ONLY === "true",
-    maximumUploadSizeBytes: 100 * 1024 * 1024,
-    pat: process.env.AZURE_DEVOPS_PAT,
-    remote: process.env.AZURE_GIT_REMOTE,
-    shouldPush: process.env.AZURE_GIT_PUSH === "true",
     sslBackend: process.env.GIT_SSL_BACKEND
   }),
   box: Object.freeze({

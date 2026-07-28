@@ -66,7 +66,7 @@ function createStorageProviderFactory(environment) {
     }),
     new AzureDevOpsStorageProvider({
       ...environment.azure,
-      codeRepoRoot: environment.projectRoot
+      localDataRepositoryEnabled: false
     })
   ]);
 }
