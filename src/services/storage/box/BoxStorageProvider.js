@@ -95,7 +95,8 @@ class BoxStorageProvider extends StorageProvider {
 
     do {
       const query = new URLSearchParams({
-        fields: "id,type,name,size,sha1,modified_at,parent",
+        fields:
+          "id,type,name,size,sha1,modified_at,parent,file_version",
         limit: "1000",
         usemarker: "true"
       });
@@ -122,6 +123,25 @@ class BoxStorageProvider extends StorageProvider {
     } while (marker);
 
     return files;
+  }
+
+  async listCloudFiles() {
+    const files = await this.listFiles();
+
+    return files
+      .map((file) => ({
+        id: file.id,
+        modifiedAt: file.modified_at,
+        name: this.fileNamingService.getDisplayName(file.name),
+        path: `/${file.name}`,
+        provider: this.key,
+        sha1: file.sha1,
+        size: Number(file.size) || 0,
+        storedName: file.name,
+        version: file.file_version?.id,
+        webUrl: `https://app.box.com/file/${encodeURIComponent(file.id)}`
+      }))
+      .sort((first, second) => first.name.localeCompare(second.name));
   }
 
   async getFileInfo(fileId) {
@@ -163,13 +183,20 @@ class BoxStorageProvider extends StorageProvider {
     this.maximumUploadSizeBytes = maximumUploadSizeBytes;
     const file = this.normalizeFile(suppliedFile);
 
-    const { filename, hash } =
+    const { filename: requestedFilename, hash } =
       await this.fileNamingService.createStoredNameForFile(
         file
       );
+    const contentSha1 = await this.fileNamingService.hashFileContents(
+      file,
+      "sha1"
+    );
     const currentFiles = await this.listFiles();
-    const existing = currentFiles.find((item) =>
-      item.name.startsWith(`${hash}-`)
+    const existing = currentFiles.find(
+      (item) =>
+        String(item.sha1 || "").toLowerCase() ===
+          contentSha1.toLowerCase() ||
+        item.name.startsWith(`${hash}-`)
     );
 
     if (existing) {
@@ -187,6 +214,10 @@ class BoxStorageProvider extends StorageProvider {
       };
     }
 
+    const filename = this.fileNamingService.createAvailableName(
+      requestedFilename,
+      currentFiles.map((item) => item.name)
+    );
     const uploaded =
       file.size > this.directUploadMaximumSizeBytes
         ? await this.uploadChunkedFile(file, filename)

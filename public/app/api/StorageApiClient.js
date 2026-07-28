@@ -27,6 +27,27 @@ export class StorageApiClient {
     return body.providers || [];
   }
 
+  async listFiles(provider, options = {}) {
+    const response = await fetch(
+      `${this.baseUrl}/storage/` +
+        `${encodeURIComponent(provider)}/files`,
+      {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json"
+        },
+        signal: options.signal
+      }
+    );
+    const body = await this.readJson(response);
+
+    if (!response.ok) {
+      throw this.createError(response, body);
+    }
+
+    return body;
+  }
+
   uploadFile({ file, onProgress, provider = "box" }) {
     return new Promise((resolve, reject) => {
       const request = new XMLHttpRequest();

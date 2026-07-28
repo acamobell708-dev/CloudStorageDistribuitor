@@ -8,7 +8,7 @@ class FileNamingService {
     const { extension, stem } = this.sanitizeName(originalName);
 
     return {
-      filename: `${hash}-${stem}${extension}`,
+      filename: `${stem}${extension}`,
       hash
     };
   }
@@ -22,9 +22,60 @@ class FileNamingService {
     const { extension, stem } = this.sanitizeName(file.filename);
 
     return {
-      filename: `${hash}-${stem}${extension}`,
+      filename: `${stem}${extension}`,
       hash
     };
+  }
+
+  async hashFileContents(file, algorithm, encoding = "hex") {
+    if (Buffer.isBuffer(file.body)) {
+      return createHash(algorithm).update(file.body).digest(encoding);
+    }
+
+    return this.hashFile(file.path, algorithm, encoding);
+  }
+
+  async createGitBlobHash(file) {
+    const hash = createHash("sha1");
+    hash.update(`blob ${file.size}\0`);
+
+    if (Buffer.isBuffer(file.body)) {
+      return hash.update(file.body).digest("hex");
+    }
+
+    return new Promise((resolve, reject) => {
+      const stream = createReadStream(file.path);
+
+      stream.on("data", (chunk) => hash.update(chunk));
+      stream.on("error", reject);
+      stream.on("end", () => resolve(hash.digest("hex")));
+    });
+  }
+
+  createAvailableName(filename, existingNames = []) {
+    const existing = new Set(
+      existingNames.map((name) => String(name).toLowerCase())
+    );
+
+    if (!existing.has(filename.toLowerCase())) {
+      return filename;
+    }
+
+    const extension = path.extname(filename);
+    const stem = path.basename(filename, extension);
+    let suffix = 2;
+    let candidate;
+
+    do {
+      candidate = `${stem} (${suffix})${extension}`;
+      suffix += 1;
+    } while (existing.has(candidate.toLowerCase()));
+
+    return candidate;
+  }
+
+  getDisplayName(storedName) {
+    return String(storedName || "").replace(/^[a-f0-9]{64}-(?=.)/i, "");
   }
 
   hashFile(filePath, algorithm, encoding) {
@@ -47,7 +98,10 @@ class FileNamingService {
     const stem =
       path
         .basename(suppliedName, suppliedExtension)
-        .replace(/[^a-zA-Z0-9_-]/g, "_")
+        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/[. ]+$/g, "")
         .slice(0, 120) || "file";
 
     return { extension, stem };

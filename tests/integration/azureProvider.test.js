@@ -19,7 +19,12 @@ test("stores Azure files using original upload names in its isolated Git directo
     "random-document-upload"
   );
   const sourceUploadPath = path.join(temporaryRoot, "random-source-upload");
+  const collisionUploadPath = path.join(
+    temporaryRoot,
+    "random-collision-upload"
+  );
   const imageBody = Buffer.from("isolated image");
+  const collisionBody = Buffer.from("different isolated image");
   const documentBody = Buffer.from("sample pdf contents");
   const sourceBody = Buffer.from("console.log('stored separately');");
 
@@ -27,6 +32,7 @@ test("stores Azure files using original upload names in its isolated Git directo
   await fs.writeFile(imageUploadPath, imageBody);
   await fs.writeFile(documentUploadPath, documentBody);
   await fs.writeFile(sourceUploadPath, sourceBody);
+  await fs.writeFile(collisionUploadPath, collisionBody);
 
   try {
     const provider = new AzureDevOpsStorageProvider({
@@ -63,10 +69,19 @@ test("stores Azure files using original upload names in its isolated Git directo
       path: sourceUploadPath,
       size: sourceBody.length
     });
+    const collisionUpload = await provider.uploadFile({
+      filename: "random-collision-upload",
+      mimetype: "image/png",
+      originalname: "photo.png",
+      path: collisionUploadPath,
+      size: collisionBody.length
+    });
 
-    assert.equal(firstUpload.path.startsWith("images/"), true);
+    assert.equal(firstUpload.path, "images/photo.png");
+    assert.equal(firstUpload.filename, "photo.png");
     assert.equal(firstUpload.pushed, false);
     assert.equal(duplicateUpload.duplicate, true);
+    assert.equal(collisionUpload.path, "images/photo (2).png");
     assert.equal(documentUpload.path.startsWith("documents/"), true);
     assert.equal(documentUpload.originalName, "report.pdf");
     assert.equal(sourceUpload.path.startsWith("source/"), true);

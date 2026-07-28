@@ -9,6 +9,7 @@ const {
 } = require("../../../errors/ApplicationError");
 const { FileNamingService } = require("../FileNamingService");
 const { StorageProvider } = require("../StorageProvider");
+const { AzureDevOpsApiClient } = require("./AzureDevOpsApiClient");
 
 const defaultExecFileAsync = promisify(execFile);
 
@@ -230,6 +231,15 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     });
 
     this.branch = options.branch || "main";
+    this.apiClient =
+      options.apiClient ||
+      new AzureDevOpsApiClient({
+        branch: this.branch,
+        fetch: options.fetch,
+        ipv4Only: options.ipv4Only,
+        pat: options.pat,
+        remote: options.remote
+      });
     this.codeRepoRoot = options.codeRepoRoot;
     this.dataRepoRoot = path.resolve(
       options.dataRepoRoot || ".azure-data-repo"
@@ -261,6 +271,10 @@ class AzureDevOpsStorageProvider extends StorageProvider {
 
   isConfigured() {
     return Boolean(this.remote && this.pat && this.shouldPush);
+  }
+
+  isListingConfigured() {
+    return this.apiClient.isConfigured();
   }
 
   getStorageLocation(filename, contentType) {
@@ -318,6 +332,38 @@ class AzureDevOpsStorageProvider extends StorageProvider {
 
   getMediaLocation(filename, contentType) {
     return this.getStorageLocation(filename, contentType);
+  }
+
+  async listCloudFiles() {
+    const items = await this.apiClient.listRepositoryItems();
+
+    return items
+      .filter(
+        (item) =>
+          !item.isFolder &&
+          String(item.gitObjectType || "").toLowerCase() === "blob"
+      )
+      .map((item) => {
+        const numericSize = Number(item.size);
+        const modifiedAt =
+          item.latestProcessedChange?.committer?.date ||
+          item.latestProcessedChange?.author?.date;
+        const storedName = path.posix.basename(item.path);
+
+        return {
+          contentType: item.contentMetadata?.contentType,
+          id: item.objectId,
+          modifiedAt,
+          name: this.fileNamingService.getDisplayName(storedName),
+          path: item.path,
+          provider: this.key,
+          ...(Number.isFinite(numericSize) ? { size: numericSize } : {}),
+          storedName,
+          version: item.commitId,
+          webUrl: this.apiClient.createFileWebUrl(item.path)
+        };
+      })
+      .sort((first, second) => first.path.localeCompare(second.path));
   }
 
   async runGit(argumentsList) {
@@ -453,19 +499,92 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     return this.dataRepositoryReady;
   }
 
-  async findExistingMedia(hash, relativeDirectory) {
+  async getStoredMediaInventory(relativeDirectory) {
     const directory = path.join(this.dataRepoRoot, relativeDirectory);
+    const inventory = new Map();
 
     try {
       const filenames = await fs.readdir(directory);
-      return filenames.find((filename) => filename.startsWith(`${hash}-`));
-    } catch (error) {
-      if (error.code === "ENOENT") {
-        return undefined;
-      }
 
-      throw error;
+      for (const filename of filenames) {
+        inventory.set(filename.toLowerCase(), {
+          filename,
+          localPath: path.join(directory, filename),
+          path: `${relativeDirectory}/${filename}`
+        });
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
     }
+
+    if (this.shouldPush && this.apiClient.isConfigured?.()) {
+      const remoteItems = await this.apiClient.listRepositoryItems();
+      const directoryPrefix = `/${relativeDirectory}/`;
+
+      for (const item of remoteItems) {
+        if (
+          item.isFolder ||
+          String(item.gitObjectType || "").toLowerCase() !== "blob" ||
+          !item.path.startsWith(directoryPrefix)
+        ) {
+          continue;
+        }
+
+        const filename = path.posix.basename(item.path);
+        const existing = inventory.get(filename.toLowerCase());
+
+        inventory.set(filename.toLowerCase(), {
+          ...existing,
+          commitId: item.commitId,
+          filename,
+          objectId: item.objectId,
+          path: item.path.replace(/^\/+/, "")
+        });
+      }
+    }
+
+    return [...inventory.values()];
+  }
+
+  async findExistingMedia({
+    gitBlobHash,
+    hash,
+    relativeDirectory
+  }) {
+    const inventory =
+      await this.getStoredMediaInventory(relativeDirectory);
+    let existing = inventory.find(
+      (item) =>
+        item.filename.startsWith(`${hash}-`) ||
+        (item.objectId &&
+          item.objectId.toLowerCase() === gitBlobHash.toLowerCase())
+    );
+
+    if (!existing) {
+      for (const item of inventory) {
+        if (!item.localPath) {
+          continue;
+        }
+
+        const localHash = await this.fileNamingService.hashFile(
+          item.localPath,
+          "sha256",
+          "hex"
+        );
+
+        if (localHash === hash) {
+          existing = item;
+          break;
+        }
+      }
+    }
+
+    return {
+      existing,
+      inventory
+    };
   }
 
   async isTrackedInHead(relativePath) {
@@ -522,9 +641,18 @@ class AzureDevOpsStorageProvider extends StorageProvider {
   async pushStoredMedia(storedFiles) {
     this.requirePushConfiguration();
 
+    const newFiles = storedFiles.filter((file) => !file.duplicate);
+
+    if (newFiles.length === 0) {
+      return (
+        storedFiles.find((file) => file.commit)?.commit ||
+        this.runGit(["rev-parse", "HEAD"])
+      );
+    }
+
     const pathsToCommit = new Set();
 
-    for (const file of storedFiles) {
+    for (const file of newFiles) {
       if (!(await this.isTrackedInHead(file.path))) {
         pathsToCommit.add(file.path);
       }
@@ -560,22 +688,30 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       file.filename,
       file.contentType
     );
-    const { filename, hash } =
+    const { filename: requestedFilename, hash } =
       await this.fileNamingService.createStoredNameForFile(file);
-    const existingFilename = await this.findExistingMedia(
+    const gitBlobHash =
+      await this.fileNamingService.createGitBlobHash(file);
+    const { existing, inventory } = await this.findExistingMedia({
+      gitBlobHash,
       hash,
-      mediaLocation.relativeDirectory
-    );
+      relativeDirectory: mediaLocation.relativeDirectory
+    });
 
-    if (existingFilename) {
+    if (existing) {
       return {
+        commit: existing.commitId,
         duplicate: true,
-        filename: existingFilename,
+        filename: existing.filename,
         hash,
-        path: `${mediaLocation.relativeDirectory}/${existingFilename}`
+        path: existing.path
       };
     }
 
+    const filename = this.fileNamingService.createAvailableName(
+      requestedFilename,
+      inventory.map((item) => item.filename)
+    );
     const safeFilename = `${path.basename(
       filename,
       path.extname(filename)

@@ -49,6 +49,7 @@ function createStorageRoutes({
   });
 
   router.get("/providers", controller.listProviders);
+  router.get("/:provider/files", controller.listFiles);
   router.post(
     "/:provider/files",
     uploadFile,

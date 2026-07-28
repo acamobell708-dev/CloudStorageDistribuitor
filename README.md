@@ -7,10 +7,11 @@ repository from one browser interface. Cloud credentials remain on the server.
 
 - Provider dropdown for Box and Azure Repos.
 - Drag-and-drop, file previews, progress, and upload status.
-- SHA-256 names and duplicate detection.
+- Original stored filenames with internal content hashes and duplicate detection.
 - Direct and chunked Box uploads.
 - Versioned Azure document, source code, and media uploads in a separate data
   repository.
+- Live Box and Azure cloud file listings from `viewFiles.html`.
 - Shared provider base class and factory for adding future storage services.
 
 ## Upload support
@@ -40,6 +41,11 @@ scripts. Files are stored under `documents/`, `source/`, `images/`,
 5. Box uploads the file directly or in chunks. Azure copies it to the isolated
    data repository, commits it, and pushes it.
 6. The temporary request file is deleted on success or failure.
+
+The file browser calls `GET /api/storage/:provider/files`. Box is read through
+its folder API, while Azure is read from the configured remote branch through
+the Azure DevOps Items REST API. Azure listings do not use the local Git working
+directory.
 
 Browser-safe UI code is under `public/`. Credentials, validation, processing,
 API routes, and provider integrations are under `src/`.
@@ -94,7 +100,8 @@ npm run dev
 ```
 
 Open `http://127.0.0.1:5173`. The React development server proxies API calls to
-the Node server on port 3000.
+the Node server on port 3000. Use `/viewFiles.html` for live file listings and
+`/dashboard.html` for the dashboard placeholder.
 
 Production:
 
@@ -123,6 +130,7 @@ CI does not require provider secrets.
 | :--- | :--- | :--- |
 | `GET` | `/api/health` | Service health |
 | `GET` | `/api/storage/providers` | Provider capabilities and current limits |
+| `GET` | `/api/storage/:provider/files` | List the provider's latest cloud files |
 | `POST` | `/api/storage/box/files` | Upload one multipart `file` to Box |
 | `POST` | `/api/storage/azure/files` | Upload one multipart `file` to Azure Repos |
 

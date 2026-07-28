@@ -62,20 +62,20 @@ test("uploads arbitrary file types with Box multipart fields in order", async ()
     apiClient.calls[1].options.body.get("attributes")
   );
   assert.equal(attributes.parent.id, "123");
-  assert.match(attributes.name, /^[a-f0-9]{64}-source_archive\.zip$/);
+  assert.equal(attributes.name, "source archive.zip");
 });
 
-test("returns an existing Box file when the SHA-256 hash matches", async () => {
+test("returns an existing Box file when the content SHA-1 matches", async () => {
   const repeatedBody = Buffer.from("duplicate");
   const crypto = require("node:crypto");
-  const hash = crypto.createHash("sha256").update(repeatedBody).digest("hex");
+  const sha1 = crypto.createHash("sha1").update(repeatedBody).digest("hex");
   const apiClient = createApiClient([
     {
       entries: [
         {
           id: "existing",
-          name: `${hash}-previous.txt`,
-          sha1: "same",
+          name: "previous.txt",
+          sha1,
           size: repeatedBody.length,
           type: "file"
         }
@@ -98,6 +98,49 @@ test("returns an existing Box file when the SHA-256 hash matches", async () => {
   assert.equal(result.duplicate, true);
   assert.equal(result.id, "existing");
   assert.equal(apiClient.calls.length, 1);
+});
+
+test("adds a readable suffix when a different Box file uses the same name", async () => {
+  const apiClient = createApiClient([
+    {
+      entries: [
+        {
+          id: "existing",
+          name: "report.txt",
+          sha1: "different-content",
+          size: 10,
+          type: "file"
+        }
+      ]
+    },
+    {
+      entries: [
+        {
+          id: "new-file",
+          name: "report (2).txt",
+          sha1: "new-content",
+          size: 11
+        }
+      ]
+    }
+  ]);
+  const provider = new BoxStorageProvider({
+    accountMaximumUploadSizeBytes: 1024,
+    apiClient,
+    folderId: "123",
+    maximumUploadSizeBytes: 1024
+  });
+
+  await provider.uploadFile({
+    body: Buffer.from("new contents"),
+    contentType: "text/plain",
+    filename: "report.txt"
+  });
+
+  const attributes = JSON.parse(
+    apiClient.calls[1].options.body.get("attributes")
+  );
+  assert.equal(attributes.name, "report (2).txt");
 });
 
 test("rejects a file above the configured direct-upload limit", async () => {
@@ -193,4 +236,43 @@ test("reads the authenticated Box account maximum upload size", async () => {
 
   assert.equal(maximumUploadSizeBytes, 2 * 1024 * 1024 * 1024);
   assert.match(apiClient.calls[0].url, /users\/me/);
+});
+
+test("normalizes the current configured Box folder listing", async () => {
+  const apiClient = createApiClient([
+    {
+      entries: [
+        {
+          file_version: {
+            id: "version-1"
+          },
+          id: "file-1",
+          modified_at: "2026-07-28T12:00:00Z",
+          name: "report.pdf",
+          sha1: "box-sha1",
+          size: 4096,
+          type: "file"
+        },
+        {
+          id: "folder-1",
+          name: "Nested",
+          type: "folder"
+        }
+      ]
+    }
+  ]);
+  const provider = new BoxStorageProvider({
+    accountMaximumUploadSizeBytes: 1024,
+    apiClient,
+    folderId: "123"
+  });
+
+  const files = await provider.listCloudFiles();
+
+  assert.equal(files.length, 1);
+  assert.equal(files[0].name, "report.pdf");
+  assert.equal(files[0].provider, "box");
+  assert.equal(files[0].size, 4096);
+  assert.equal(files[0].version, "version-1");
+  assert.match(files[0].webUrl, /app\.box\.com\/file\/file-1/);
 });

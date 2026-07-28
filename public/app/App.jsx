@@ -4,6 +4,7 @@ import {
   FileDropzone,
   formatBytes
 } from "./components/FileDropzone";
+import { AppShell } from "./components/AppShell";
 import { Icon } from "./components/Icon";
 import { ProviderPanel } from "./components/ProviderPanel";
 import { UploadResult } from "./components/UploadResult";
@@ -140,71 +141,8 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="/" aria-label="Cloud Storage home">
-          <span className="brand-mark">
-            <span />
-            <span />
-            <span />
-          </span>
-          <span>
-            CLOUD<span>PORT</span>
-          </span>
-        </a>
-        <nav aria-label="Primary navigation">
-          <a className="is-active" href="/">
-            Home
-          </a>
-        </nav>
-      </header>
-
-      <div className="workspace">
-        <aside className="side-rail" aria-label="Workspace sections">
-          <div className="rail-group">
-            <span className="rail-label">Workspace</span>
-            <a className="rail-link is-active" href="/">
-              <Icon name="upload" size={18} />
-              <span>Upload</span>
-            </a>
-            <a className="rail-link" href="/dashboard.html">
-              <Icon name="grid" size={18} />
-              <span>Dashboard</span>
-            </a>
-          </div>
-          <div className="rail-group">
-            <span className="rail-label">Storage</span>
-            <a
-              aria-disabled="true"
-              className="rail-link"
-              href="#"
-              onClick={(event) => event.preventDefault()}
-            >
-              <Icon name="folder" size={19} />
-              <span>View Files</span>
-            </a>
-            <a
-              aria-disabled="true"
-              className="rail-link"
-              href="#"
-              onClick={(event) => event.preventDefault()}
-            >
-              <Icon name="archive" size={18} />
-              <span>Available storage</span>
-            </a>
-          </div>
-          <div className="rail-footer">
-            <div className="mini-shield">
-              <Icon name="lock" size={17} />
-            </div>
-            <div>
-              <strong>Server secured</strong>
-              <span>Secrets stay in src</span>
-            </div>
-          </div>
-        </aside>
-
-        <main id="send">
+    <AppShell activePage="upload">
+      <main id="send">
           <section className="hero">
             <div>
               <span className="section-kicker">
@@ -278,7 +216,7 @@ export default function App() {
                   <FileDropzone
                     acceptedDescription={
                       selectedProviderKey === "azure"
-                        ? "Images, audio and video"
+                        ? "Documents, source code, images, audio and video"
                         : "Documents, media, archives and more"
                     }
                     acceptedFileTypes={
@@ -385,7 +323,7 @@ export default function App() {
                 <div>
                   <strong>Transfer history is ready to grow</strong>
                   <p>
-                    Box uploads and versioned Azure media now share one secure
+                    Box uploads and versioned Azure files now share one secure
                     transfer path. Browsing, downloads, and unified history fit
                     the same provider structure next.
                   </p>
@@ -394,8 +332,7 @@ export default function App() {
               </div>
             </div>
           </section>
-        </main>
-      </div>
-    </div>
+      </main>
+    </AppShell>
   );
 }

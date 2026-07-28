@@ -26,6 +26,7 @@ class StorageProvider {
       description: this.description,
       displayName: this.displayName,
       key: this.key,
+      listingConfigured: this.isListingConfigured(),
       maximumUploadSizeBytes: await this.getMaximumUploadSizeBytes()
     };
   }
@@ -36,6 +37,10 @@ class StorageProvider {
 
   isConfigured() {
     return false;
+  }
+
+  isListingConfigured() {
+    return this.isConfigured();
   }
 
   normalizeFile(file) {
@@ -85,6 +90,12 @@ class StorageProvider {
 
   async uploadFile() {
     throw new Error(`${this.displayName} does not implement uploadFile()`);
+  }
+
+  async listCloudFiles() {
+    throw new Error(
+      `${this.displayName} does not implement listCloudFiles()`
+    );
   }
 }
 

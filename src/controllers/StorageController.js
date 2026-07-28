@@ -1,7 +1,8 @@
 const { ValidationError } = require("../errors/ApplicationError");
 
 class StorageController {
-  constructor({ fileUploadService, providerFactory }) {
+  constructor({ fileListingService, fileUploadService, providerFactory }) {
+    this.fileListingService = fileListingService;
     this.fileUploadService = fileUploadService;
     this.providerFactory = providerFactory;
   }
@@ -11,6 +12,16 @@ class StorageController {
       response.json({
         providers: await this.providerFactory.list()
       });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listFiles = async (request, response, next) => {
+    try {
+      response.json(
+        await this.fileListingService.list(request.params.provider)
+      );
     } catch (error) {
       next(error);
     }

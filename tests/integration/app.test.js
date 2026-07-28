@@ -22,11 +22,24 @@ function createTestApplication(overrides = {}) {
       description: `${displayName} test provider`,
       displayName,
       key,
+      listingConfigured: true,
       maximumUploadSizeBytes:
         overrides.maximumUploadSizeBytes || 1024
     }),
     isConfigured: () => true,
+    isListingConfigured: () => true,
     key,
+    listCloudFiles: async () => [
+      {
+        id: `${key}-file-1`,
+        modifiedAt: "2026-07-28T12:00:00Z",
+        name: `${key}-file.txt`,
+        path: `/${key}-file.txt`,
+        provider: key,
+        size: 12,
+        version: "version-1"
+      }
+    ],
     maximumUploadSizeBytes:
       overrides.maximumUploadSizeBytes || 1024,
     uploadFile: async (file) => ({
@@ -111,6 +124,22 @@ test("routes a media upload to the selected Azure provider", async () => {
     assert.equal(body.file.provider, "azure");
     assert.equal(body.file.path, "images/stored-file.png");
     assert.equal(body.message, "photo.png was sent to Azure Repos");
+  });
+});
+
+test("lists current cloud files through the selected provider", async () => {
+  await withServer(createTestApplication(), async (baseUrl) => {
+    const response = await fetch(
+      `${baseUrl}/api/storage/azure/files`
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.source, "cloud");
+    assert.equal(body.provider.key, "azure");
+    assert.equal(body.files.length, 1);
+    assert.equal(body.files[0].name, "azure-file.txt");
+    assert.match(body.refreshedAt, /^\d{4}-\d{2}-\d{2}T/);
   });
 });
 
