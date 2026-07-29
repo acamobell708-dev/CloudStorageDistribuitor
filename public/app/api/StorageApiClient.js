@@ -12,11 +12,13 @@ export class StorageApiClient {
     this.baseUrl = baseUrl;
   }
 
-  async listProviders() {
+  async listProviders(options = {}) {
     const response = await fetch(`${this.baseUrl}/storage/providers`, {
+      cache: "no-store",
       headers: {
         Accept: "application/json"
-      }
+      },
+      signal: options.signal
     });
     const body = await this.readJson(response);
 
