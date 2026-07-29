@@ -185,3 +185,43 @@ test("creates a remote Azure Git push with base64 file content", async () => {
     "base64Encoded"
   );
 });
+
+test("creates an Azure Git deletion commit without file content", async () => {
+  const calls = [];
+  const client = new AzureDevOpsApiClient({
+    branch: "main",
+    fetch: async (url, options) => {
+      calls.push({ options, url });
+      return Response.json(
+        {
+          commits: [
+            {
+              commitId: "deletion-commit"
+            }
+          ]
+        },
+        { status: 201 }
+      );
+    },
+    pat: "secret-pat",
+    remote:
+      "https://organization@dev.azure.com/organization/project/_git/media"
+  });
+
+  await client.createFileDeletePush({
+    comment: "Delete photo.png",
+    oldObjectId: "previous-commit",
+    path: "/images/photo.png"
+  });
+
+  const body = JSON.parse(calls[0].options.body);
+  const change = body.commits[0].changes[0];
+
+  assert.equal(change.changeType, "delete");
+  assert.equal(change.item.path, "/images/photo.png");
+  assert.equal(change.newContent, undefined);
+  assert.equal(
+    body.refUpdates[0].oldObjectId,
+    "previous-commit"
+  );
+});

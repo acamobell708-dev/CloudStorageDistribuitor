@@ -10,6 +10,9 @@ const {
 const { FileNamingService } = require("../FileNamingService");
 const { StorageProvider } = require("../StorageProvider");
 const { AzureDevOpsApiClient } = require("./AzureDevOpsApiClient");
+const {
+  AzureGitHistoryPurgeService
+} = require("./AzureGitHistoryPurgeService");
 
 const defaultExecFileAsync = promisify(execFile);
 
@@ -160,6 +163,13 @@ const sourceMimeTypes = new Set([
 
 class AzureDevOpsStorageProvider extends StorageProvider {
   constructor(options = {}) {
+    const deletionConfigured = Boolean(
+      options.remote && options.pat && options.shouldPush
+    );
+    const permanentDeletionConfigured = Boolean(
+      deletionConfigured && options.purgePat
+    );
+
     super({
       acceptedFileTypes: [
         "image/*",
@@ -228,7 +238,14 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       displayName: "Azure Repos",
       key: "azure",
       maximumUploadSizeBytes:
-        options.maximumUploadSizeBytes || 100 * 1024 * 1024
+        options.maximumUploadSizeBytes || 100 * 1024 * 1024,
+      supportedFileActions: [
+        "download",
+        ...(deletionConfigured ? ["delete"] : []),
+        ...(permanentDeletionConfigured
+          ? ["permanent-delete"]
+          : [])
+      ]
     });
 
     this.branch = options.branch || "main";
@@ -256,9 +273,20 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       options.gitAuthorName || "Cloud Storage Media Service";
     this.ipv4Only = Boolean(options.ipv4Only);
     this.pat = options.pat;
+    this.permanentDeletionConfigured = permanentDeletionConfigured;
     this.remote = options.remote;
     this.shouldPush = Boolean(options.shouldPush);
     this.sslBackend = options.sslBackend;
+    this.historyPurgeService =
+      options.historyPurgeService ||
+      (permanentDeletionConfigured
+        ? new AzureGitHistoryPurgeService({
+            branch: this.branch,
+            ipv4Only: this.ipv4Only,
+            purgePat: options.purgePat,
+            remote: this.remote
+          })
+        : undefined);
     this.dataRepositoryReady = undefined;
     this.operationQueue = Promise.resolve();
 
@@ -367,6 +395,35 @@ class AzureDevOpsStorageProvider extends StorageProvider {
   }
 
   async downloadCloudFile(fileReference) {
+    const item = await this.findCurrentCloudItem(fileReference);
+    const response = await this.apiClient.downloadRepositoryItem(item.path);
+    const responseSizeHeader = response.headers.get("content-length");
+    const responseSize =
+      responseSizeHeader === null
+        ? Number.NaN
+        : Number(responseSizeHeader);
+    const itemSize = Number(item.size);
+    const storedName = path.posix.basename(item.path);
+
+    return {
+      body: response.body,
+      contentType:
+        response.headers.get("content-type") ||
+        item.contentMetadata?.contentType ||
+        "application/octet-stream",
+      filename: this.fileNamingService.getDisplayName(storedName),
+      id: item.objectId,
+      path: item.path,
+      provider: this.key,
+      size: Number.isFinite(itemSize)
+        ? itemSize
+        : Number.isFinite(responseSize)
+          ? responseSize
+          : undefined
+    };
+  }
+
+  async findCurrentCloudItem(fileReference) {
     const fileId = String(fileReference?.id || "").trim();
     const filePath = String(fileReference?.path || "").trim();
 
@@ -395,31 +452,92 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       );
     }
 
-    const response = await this.apiClient.downloadRepositoryItem(item.path);
-    const responseSizeHeader = response.headers.get("content-length");
-    const responseSize =
-      responseSizeHeader === null
-        ? Number.NaN
-        : Number(responseSizeHeader);
-    const itemSize = Number(item.size);
+    return item;
+  }
+
+  async deleteFileDirectly(fileReference) {
+    this.requirePushConfiguration();
+
+    const branchReference = await this.apiClient.getBranchReference();
+
+    if (!branchReference?.objectId) {
+      throw new ValidationError(
+        `The configured Azure branch ${this.branch} was not found`,
+        {
+          code: "BRANCH_NOT_FOUND",
+          statusCode: 404
+        }
+      );
+    }
+
+    const item = await this.findCurrentCloudItem(fileReference);
     const storedName = path.posix.basename(item.path);
+    const push = await this.apiClient.createFileDeletePush({
+      comment: `Delete ${path.posix.basename(item.path)}`,
+      oldObjectId: branchReference.objectId,
+      path: item.path
+    });
+    const commit =
+      push?.commits?.[0]?.commitId ||
+      push?.refUpdates?.[0]?.newObjectId;
+
+    if (!commit) {
+      throw new Error(
+        "Azure DevOps did not return the deletion commit"
+      );
+    }
 
     return {
-      body: response.body,
-      contentType:
-        response.headers.get("content-type") ||
-        item.contentMetadata?.contentType ||
-        "application/octet-stream",
       filename: this.fileNamingService.getDisplayName(storedName),
       id: item.objectId,
       path: item.path,
       provider: this.key,
-      size: Number.isFinite(itemSize)
-        ? itemSize
-        : Number.isFinite(responseSize)
-          ? responseSize
-          : undefined
+      commit,
+      removed: true,
+      retainedInHistory: true
     };
+  }
+
+  deleteCloudFile(fileReference) {
+    return this.enqueueOperation(() =>
+      this.deleteFileDirectly(fileReference)
+    );
+  }
+
+  async permanentlyDeleteFileDirectly(fileReference) {
+    this.requirePushConfiguration();
+
+    if (
+      !this.permanentDeletionConfigured ||
+      !this.historyPurgeService
+    ) {
+      throw new ConfigurationError(
+        "Azure permanent deletion requires a purge PAT"
+      );
+    }
+
+    const item = await this.findCurrentCloudItem(fileReference);
+    const storedName = path.posix.basename(item.path);
+    const purge = await this.historyPurgeService.purge({
+      id: item.objectId,
+      path: item.path
+    });
+
+    return {
+      ...purge,
+      filename: this.fileNamingService.getDisplayName(storedName),
+      id: item.objectId,
+      path: item.path,
+      provider: this.key,
+      removed: true,
+      removedFromHistory: true
+    };
+  }
+
+  permanentlyDeleteCloudFile(fileReference) {
+    return this.enqueueOperation(() =>
+      this.permanentlyDeleteFileDirectly(fileReference)
+    );
   }
 
   async uploadFileDirectly(fileOrBody, originalName, contentType) {
@@ -1044,22 +1162,22 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     return result.files[0];
   }
 
-  uploadFile(...argumentsList) {
-    const job = this.operationQueue.then(() =>
-      this.uploadFileDirectly(...argumentsList)
-    );
-
+  enqueueOperation(operation) {
+    const job = this.operationQueue.then(operation);
     this.operationQueue = job.catch(() => undefined);
     return job;
   }
 
+  uploadFile(...argumentsList) {
+    return this.enqueueOperation(() =>
+      this.uploadFileDirectly(...argumentsList)
+    );
+  }
+
   uploadFiles(files) {
-    const job = this.operationQueue.then(() =>
+    return this.enqueueOperation(() =>
       this.uploadFilesDirectly(files)
     );
-
-    this.operationQueue = job.catch(() => undefined);
-    return job;
   }
 
   async removeLastCommitMedia() {

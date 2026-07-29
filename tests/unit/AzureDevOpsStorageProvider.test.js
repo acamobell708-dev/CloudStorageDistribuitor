@@ -216,6 +216,103 @@ test("downloads only a file present on the configured Azure branch", async () =>
   );
 });
 
+test("deletes a current Azure file with a versioned Git commit", async () => {
+  let deletePush;
+  const apiClient = {
+    createFileDeletePush: async (details) => {
+      deletePush = details;
+      return {
+        commits: [
+          {
+            commitId: "deletion-commit"
+          }
+        ]
+      };
+    },
+    getBranchReference: async () => ({
+      name: "refs/heads/main",
+      objectId: "current-commit"
+    }),
+    isConfigured: () => true,
+    listRepositoryItems: async () => [
+      {
+        gitObjectType: "blob",
+        isFolder: false,
+        objectId: "a".repeat(40),
+        path: "/images/photo.png"
+      }
+    ]
+  };
+  const provider = createProvider({
+    apiClient,
+    localDataRepositoryEnabled: false
+  });
+
+  const result = await provider.deleteCloudFile({
+    id: "a".repeat(40),
+    path: "/images/photo.png"
+  });
+
+  assert.equal(result.removed, true);
+  assert.equal(result.retainedInHistory, true);
+  assert.equal(result.commit, "deletion-commit");
+  assert.deepEqual(deletePush, {
+    comment: "Delete photo.png",
+    oldObjectId: "current-commit",
+    path: "/images/photo.png"
+  });
+});
+
+test("permanently deletes only a verified current Azure file", async () => {
+  let purgeReference;
+  const objectId = "b".repeat(40);
+  const apiClient = {
+    isConfigured: () => true,
+    listRepositoryItems: async () => [
+      {
+        gitObjectType: "blob",
+        isFolder: false,
+        objectId,
+        path: "/images/photo.png"
+      }
+    ]
+  };
+  const historyPurgeService = {
+    purge: async (fileReference) => {
+      purgeReference = fileReference;
+      return {
+        previousCommit: "old-commit",
+        rewrittenCommit: "new-commit",
+        verified: true
+      };
+    }
+  };
+  const provider = createProvider({
+    apiClient,
+    historyPurgeService,
+    localDataRepositoryEnabled: false,
+    purgePat: "purge-pat"
+  });
+
+  const result = await provider.permanentlyDeleteCloudFile({
+    id: objectId,
+    path: "/images/photo.png"
+  });
+
+  assert.equal(result.removed, true);
+  assert.equal(result.removedFromHistory, true);
+  assert.equal(result.verified, true);
+  assert.deepEqual(purgeReference, {
+    id: objectId,
+    path: "/images/photo.png"
+  });
+  assert.deepEqual(provider.supportedFileActions, [
+    "download",
+    "delete",
+    "permanent-delete"
+  ]);
+});
+
 test("detects an Azure duplicate from the current remote Git blob", async () => {
   const body = Buffer.from("remote image");
   const objectId = createHash("sha1")

@@ -44,13 +44,13 @@ function handleRowKeyDown(event, file, onSelect) {
 
 export function FileList({
   canDelete,
-  deletingFileKey,
   files,
   onDelete,
   onDownload,
   onSelect,
   providerName,
-  selectedFileKey
+  selectedFileKey,
+  workingFileKey
 }) {
   if (files.length === 0) {
     return (
@@ -83,7 +83,7 @@ export function FileList({
           {files.map((file) => {
             const fileKey = createFileKey(file);
             const selected = selectedFileKey === fileKey;
-            const deleting = deletingFileKey === fileKey;
+            const working = workingFileKey === fileKey;
 
             return (
               <tr
@@ -113,7 +113,7 @@ export function FileList({
                       <button
                         aria-label={`Download ${file.name}`}
                         className="file-action-button file-download-button"
-                        disabled={deleting}
+                        disabled={working}
                         onClick={(event) => {
                           event.stopPropagation();
                           onDownload(file);
@@ -127,7 +127,7 @@ export function FileList({
                         <button
                           aria-label={`Delete ${file.name}`}
                           className="file-action-button file-delete-button"
-                          disabled={deleting}
+                          disabled={working}
                           onClick={(event) => {
                             event.stopPropagation();
                             onDelete(file);

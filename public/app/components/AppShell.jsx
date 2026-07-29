@@ -1,4 +1,7 @@
 import { Icon } from "./Icon";
+import { permissions } from "../auth/permissions";
+import { useAuthSession } from "../auth/AuthSessionProvider";
+import { UserMenu } from "./UserMenu";
 
 const navigationSections = [
   {
@@ -25,7 +28,8 @@ const navigationSections = [
         href: "/manageFiles.html",
         icon: "folder",
         key: "files",
-        label: "Manage Files"
+        label: "Manage Files",
+        requiredPermission: permissions.listFiles
       },
       {
         disabled: true,
@@ -39,6 +43,8 @@ const navigationSections = [
 ];
 
 export function AppShell({ activePage, children }) {
+  const { hasPermission } = useAuthSession();
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -52,11 +58,17 @@ export function AppShell({ activePage, children }) {
             CLOUD<span>PORT</span>
           </span>
         </a>
-        <nav aria-label="Primary navigation">
-          <a className={activePage === "upload" ? "is-active" : ""} href="/">
-            Home
-          </a>
-        </nav>
+        <div className="topbar-actions">
+          <nav aria-label="Primary navigation">
+            <a
+              className={activePage === "upload" ? "is-active" : ""}
+              href="/"
+            >
+              Home
+            </a>
+          </nav>
+          <UserMenu />
+        </div>
       </header>
 
       <div className="workspace">
@@ -64,30 +76,44 @@ export function AppShell({ activePage, children }) {
           {navigationSections.map((section) => (
             <div className="rail-group" key={section.label}>
               <span className="rail-label">{section.label}</span>
-              {section.links.map((link) => (
-                <a
-                  aria-current={activePage === link.key ? "page" : undefined}
-                  aria-disabled={link.disabled ? "true" : undefined}
-                  className={
-                    activePage === link.key
-                      ? "rail-link is-active"
-                      : "rail-link"
-                  }
-                  href={link.href}
-                  key={link.key}
-                  onClick={
-                    link.disabled
-                      ? (event) => event.preventDefault()
-                      : undefined
-                  }
-                >
-                  <Icon
-                    name={link.icon}
-                    size={link.icon === "folder" ? 19 : 18}
-                  />
-                  <span>{link.label}</span>
-                </a>
-              ))}
+              {section.links.map((link) => {
+                const disabled =
+                  link.disabled ||
+                  (link.requiredPermission &&
+                    !hasPermission(link.requiredPermission));
+
+                return (
+                  <a
+                    aria-current={
+                      activePage === link.key ? "page" : undefined
+                    }
+                    aria-disabled={disabled ? "true" : undefined}
+                    className={
+                      activePage === link.key
+                        ? "rail-link is-active"
+                        : "rail-link"
+                    }
+                    href={disabled ? "#" : link.href}
+                    key={link.key}
+                    onClick={
+                      disabled
+                        ? (event) => event.preventDefault()
+                        : undefined
+                    }
+                    title={
+                      disabled && link.requiredPermission
+                        ? "Guest accounts cannot manage files"
+                        : undefined
+                    }
+                  >
+                    <Icon
+                      name={link.icon}
+                      size={link.icon === "folder" ? 19 : 18}
+                    />
+                    <span>{link.label}</span>
+                  </a>
+                );
+              })}
             </div>
           ))}
 

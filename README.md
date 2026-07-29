@@ -10,7 +10,9 @@ repository from one browser interface. Cloud credentials remain on the server.
 - Original stored filenames with internal content hashes and duplicate detection.
 - Direct and chunked Box uploads.
 - Versioned Azure uploads sent directly to the remote repository API.
-- Live Box and Azure file management with streamed downloads and Box deletion.
+- Live Box and Azure file management with streamed downloads and deletion.
+- Owner-authorized Azure history purge for exceptional permanent deletion.
+- Predefined member accounts, in-memory sessions, and read-only guest access.
 - Shared provider base class and factory for adding future storage services.
 
 ## Upload support
@@ -48,13 +50,34 @@ through its folder API, while Azure is read from the configured remote branch
 through the Azure DevOps Items REST API. Selecting a row exposes its download
 action. The server verifies the current cloud item, then streams it to the
 browser without exposing provider credentials or writing another local copy.
-For Box, the selected-row delete action verifies the configured parent folder,
-waits for Box to confirm deletion, and refreshes the cloud listing. Box
-enterprise settings determine whether deletion moves the item to trash or
-removes it permanently.
+The normal delete action verifies the current cloud item before deleting it.
+Box enterprise settings determine whether its deletion uses trash. Azure
+creates a deletion commit, so earlier Git versions remain available.
+
+Azure also exposes an owner-only permanent deletion when its purge settings are
+configured. It creates an isolated temporary mirror, removes the selected path
+from every reachable commit, force-pushes only if the branch has not changed,
+freshly clones the cloud repository to verify the result, and deletes the
+temporary mirror. For safety, the repository must contain only its configured
+branch with no tags or other refs. Azure may retain unreachable internal
+objects until its own maintenance completes.
 
 Browser-safe UI code is under `public/`. Credentials, validation, processing,
 API routes, and provider integrations are under `src/`.
+
+## Access
+
+`login.html` is the application entry point. The three supplied accounts are
+defined server-side using salted password hashes: Adam is the owner, while
+Wilson and Andrew are members. All can use normal storage actions; only the
+owner can permanently rewrite Azure history.
+
+Guest sessions can view Home and Dashboard. Storage uploads, listings,
+downloads, deletions, and the Manage Files page are blocked by server
+middleware as well as the UI. Sessions are held in server memory for eight
+hours by default, so restarting the server signs everyone out without needing
+a user database. Five failed logins temporarily limit further attempts from
+that client.
 
 ## Configuration
 
@@ -81,39 +104,52 @@ AZURE_GIT_REMOTE=https://your-organization@dev.azure.com/your-organization/your-
 AZURE_GIT_BRANCH=main
 AZURE_GIT_PUSH=true
 AZURE_DEVOPS_PAT=
+AZURE_PURGE_PAT=
 ```
 
 The PAT needs code read/write access. `AZURE_GIT_PUSH=true` enables browser
 writes. Web uploads go straight to the configured remote and do not use a local
 Git working tree, which keeps uploaded data out of the GitHub code repository.
 
+`AZURE_PURGE_PAT` is optional and otherwise defaults to `AZURE_DEVOPS_PAT`.
+Its Azure identity needs repository read/write and **Force push (rewrite
+history)** permission. A separate service identity provides the strongest
+separation; two PATs owned by the same Azure identity still share that
+identity's repository permissions. The server permits purge requests only for
+the predefined owner account. Deploy behind HTTPS.
+
 `AZURE_DATA_REPO_DIR=../AzureDataRepo` is optional and used only by the CLI
 connectivity tests. The web provider is created with local-repository access
-disabled and is not given this configured path.
+disabled and is not given this configured path. Permanent deletion uses only a
+short-lived operating-system temporary mirror and cleans it up on success or
+failure.
 
 Optional local settings:
 
 ```dotenv
 HOST=127.0.0.1
 PORT=3000
+AUTH_SESSION_HOURS=8
+AUTH_SECURE_COOKIE=false
 UPLOAD_TEMP_DIR=
 ```
 
 `UPLOAD_TEMP_DIR` applies to disk-backed providers such as Box, not Azure
-browser uploads.
+browser uploads. Set `AUTH_SECURE_COOKIE=true` when serving through HTTPS.
 
 ## Run
 
-Requires Node.js 22.12 or newer.
+Requires Node.js 22.12 or newer. Permanent Azure deletion also requires Git on
+the server.
 
 ```shell
 npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. The React development server proxies API calls to
-the Node server on port 3000. Use `/manageFiles.html` to manage cloud files and
-`/dashboard.html` for the dashboard placeholder.
+Open `http://127.0.0.1:5173/login.html`. The React development server proxies
+API calls to the Node server on port 3000. Authenticated members can use
+`/manageFiles.html`; all signed-in roles can use `/dashboard.html`.
 
 Production:
 
@@ -142,10 +178,15 @@ secrets.
 | Method | Endpoint | Purpose |
 | :--- | :--- | :--- |
 | `GET` | `/api/health` | Service health |
+| `GET` | `/api/auth/session` | Read the current login session |
+| `POST` | `/api/auth/login` | Start a predefined-user session |
+| `POST` | `/api/auth/guest` | Start a restricted guest session |
+| `POST` | `/api/auth/logout` | Revoke the current session |
 | `GET` | `/api/storage/providers` | Provider capabilities and current limits |
 | `GET` | `/api/storage/:provider/files` | List the provider's latest cloud files |
 | `GET` | `/api/storage/:provider/files/:fileId/download` | Stream the selected current cloud file |
-| `DELETE` | `/api/storage/:provider/files/:fileId` | Delete a supported provider file |
+| `DELETE` | `/api/storage/:provider/files/:fileId` | Delete a supported provider file; Azure retains Git history |
+| `DELETE` | `/api/storage/azure/files/:fileId/history` | Owner-authorized removal from current and reachable Azure history |
 | `POST` | `/api/storage/box/files` | Upload one multipart `file` to Box |
 | `POST` | `/api/storage/azure/files` | Upload one multipart `file` to Azure Repos |
 

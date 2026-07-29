@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useAuthSession } from "./auth/AuthSessionProvider";
+import { permissions } from "./auth/permissions";
 import { StorageApiClient } from "./api/StorageApiClient";
 import {
   FileDropzone,
@@ -12,6 +14,7 @@ import { UploadResult } from "./components/UploadResult";
 const defaultMaximumUploadSizeBytes = 50 * 1024 * 1024;
 
 export default function App() {
+  const { hasPermission, user } = useAuthSession();
   const apiClient = useMemo(() => new StorageApiClient(), []);
   const [file, setFile] = useState();
   const [providers, setProviders] = useState([]);
@@ -31,8 +34,14 @@ export default function App() {
     selectedProvider?.maximumUploadSizeBytes ||
     defaultMaximumUploadSizeBytes;
   const uploading = upload.status === "uploading";
+  const canWrite = hasPermission(permissions.uploadFiles);
+  const query = new URLSearchParams(window.location.search);
+  const loginAccepted = query.get("login") === "accepted";
+  const guestAccepted = query.get("login") === "guest";
+  const accessDenied = query.get("access") === "denied";
   const canUpload = Boolean(
-    file &&
+    canWrite &&
+      file &&
       selectedProvider?.configured &&
       !selectedProvider?.connectionError &&
       !uploading
@@ -59,6 +68,10 @@ export default function App() {
   }, [apiClient]);
 
   function selectFile(selectedFile) {
+    if (!canWrite) {
+      return;
+    }
+
     if (selectedFile.size === 0) {
       setUpload((current) => ({
         ...current,
@@ -143,6 +156,36 @@ export default function App() {
   return (
     <AppShell activePage="upload">
       <main id="send">
+          {(loginAccepted || guestAccepted || accessDenied || !canWrite) && (
+            <div
+              className={`access-notice ${
+                accessDenied ? "is-warning" : ""
+              }`}
+              role="status"
+            >
+              <Icon
+                name={accessDenied ? "lock" : "check"}
+                size={17}
+              />
+              <span>
+                <strong>
+                  {loginAccepted
+                    ? `Password accepted. Welcome, ${user.displayName}.`
+                    : guestAccepted
+                      ? "Guest access granted."
+                      : accessDenied
+                        ? "That page is not available to your account."
+                        : "Guest view is read-only."}
+                </strong>
+                {!canWrite && (
+                  <small>
+                    You can view Home and Dashboard, but storage actions are
+                    disabled.
+                  </small>
+                )}
+              </span>
+            </div>
+          )}
           <section className="hero">
             <div>
               <span className="section-kicker">
@@ -196,7 +239,9 @@ export default function App() {
                       />
                       <select
                         aria-label="Storage provider"
-                        disabled={uploading || providersLoading}
+                        disabled={
+                          !canWrite || uploading || providersLoading
+                        }
                         onChange={(event) =>
                           selectProvider(event.target.value)
                         }
@@ -222,7 +267,9 @@ export default function App() {
                     acceptedFileTypes={
                       selectedProvider?.acceptedFileTypes || ["*/*"]
                     }
-                    disabled={uploading || providersLoading}
+                    disabled={
+                      !canWrite || uploading || providersLoading
+                    }
                     file={file}
                     maximumUploadSizeBytes={maximumUploadSizeBytes}
                     onClear={reset}
@@ -311,6 +358,7 @@ export default function App() {
 
             <div id="connections">
               <ProviderPanel
+                disabled={!canWrite}
                 loading={providersLoading}
                 onSelect={selectProvider}
                 providers={providers}

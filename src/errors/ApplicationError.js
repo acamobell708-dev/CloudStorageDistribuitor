@@ -38,9 +38,42 @@ class ExternalServiceError extends ApplicationError {
   }
 }
 
+class AuthorizationError extends ApplicationError {
+  constructor(message, options = {}) {
+    super(message, {
+      ...options,
+      code: options.code || "AUTHORIZATION_ERROR",
+      statusCode: options.statusCode || 403
+    });
+  }
+}
+
+class AuthenticationError extends ApplicationError {
+  constructor(message, options = {}) {
+    super(message, {
+      ...options,
+      code: options.code || "AUTHENTICATION_REQUIRED",
+      statusCode: options.statusCode || 401
+    });
+  }
+}
+
+class RateLimitError extends ApplicationError {
+  constructor(message, options = {}) {
+    super(message, {
+      ...options,
+      code: options.code || "TOO_MANY_ATTEMPTS",
+      statusCode: options.statusCode || 429
+    });
+  }
+}
+
 module.exports = {
   ApplicationError,
+  AuthenticationError,
+  AuthorizationError,
   ConfigurationError,
   ExternalServiceError,
+  RateLimitError,
   ValidationError
 };

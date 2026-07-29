@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const os = require("node:os");
 const path = require("node:path");
+const { permissions } = require("../services/auth/permissions");
 
 function createProviderUploadMiddleware({
   providerFactory,
@@ -47,6 +48,8 @@ function createProviderUploadMiddleware({
 function createStorageRoutes({
   controller,
   providerFactory,
+  requireAuthentication,
+  requirePermission,
   uploadTempDirectory
 }) {
   const router = express.Router();
@@ -55,15 +58,31 @@ function createStorageRoutes({
     uploadTempDirectory
   });
 
+  router.use(requireAuthentication);
   router.get("/providers", controller.listProviders);
-  router.get("/:provider/files", controller.listFiles);
+  router.get(
+    "/:provider/files",
+    requirePermission(permissions.listFiles),
+    controller.listFiles
+  );
   router.get(
     "/:provider/files/:fileId/download",
+    requirePermission(permissions.downloadFiles),
     controller.downloadFile
   );
-  router.delete("/:provider/files/:fileId", controller.deleteFile);
+  router.delete(
+    "/:provider/files/:fileId/history",
+    requirePermission(permissions.permanentlyDeleteFiles),
+    controller.permanentlyDeleteFile
+  );
+  router.delete(
+    "/:provider/files/:fileId",
+    requirePermission(permissions.deleteFiles),
+    controller.deleteFile
+  );
   router.post(
     "/:provider/files",
+    requirePermission(permissions.uploadFiles),
     uploadFile,
     controller.uploadFile
   );

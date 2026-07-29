@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StorageApiClient } from "../api/StorageApiClient";
+import { useAuthSession } from "../auth/AuthSessionProvider";
+import { permissions } from "../auth/permissions";
 import { AppShell } from "../components/AppShell";
 import { Icon } from "../components/Icon";
 import { BrowserFileDownloadService } from "./BrowserFileDownloadService";
 import { createFileKey, FileList } from "./FileList";
+import { PermanentDeletionDialog } from "./PermanentDeletionDialog";
 import { ProviderSelector } from "./ProviderSelector";
 
 export function ManageFilesApp() {
+  const { hasPermission } = useAuthSession();
   const apiClient = useMemo(() => new StorageApiClient(), []);
   const downloadService = useMemo(
     () => new BrowserFileDownloadService(apiClient),
@@ -19,6 +23,9 @@ export function ManageFilesApp() {
   const [selectedFileKey, setSelectedFileKey] = useState();
   const [fileAction, setFileAction] = useState({
     status: "idle"
+  });
+  const [purgeDialog, setPurgeDialog] = useState({
+    open: false
   });
   const [refreshRequest, setRefreshRequest] = useState({
     background: false,
@@ -35,6 +42,12 @@ export function ManageFilesApp() {
   );
   const listingConfigured =
     selectedProvider?.listingConfigured ?? selectedProvider?.configured;
+  const actionInProgress = ["deleting", "purging"].includes(
+    fileAction.status
+  );
+  const selectedFile = files.find(
+    (file) => createFileKey(file) === selectedFileKey
+  );
 
   useEffect(() => {
     let active = true;
@@ -156,6 +169,7 @@ export function ManageFilesApp() {
   const selectProvider = (providerKey) => {
     setFiles([]);
     setFileAction({ status: "idle" });
+    setPurgeDialog({ open: false });
     setSelectedFileKey(undefined);
     setRefreshRequest((current) => ({
       ...current,
@@ -165,7 +179,7 @@ export function ManageFilesApp() {
   };
 
   const selectFile = (file) => {
-    if (fileAction.status === "deleting") {
+    if (actionInProgress) {
       return;
     }
 
@@ -212,7 +226,10 @@ export function ManageFilesApp() {
       setFileAction({
         detail:
           `${file.name} was deleted from ` +
-          `${result.provider.displayName}.`,
+          `${result.provider.displayName}.` +
+          (result.file.retainedInHistory
+            ? " Its earlier Git versions remain in history."
+            : ""),
         status: "success",
         title: "Item deleted"
       });
@@ -227,10 +244,90 @@ export function ManageFilesApp() {
     }
   };
 
+  const closePurgeDialog = useCallback(() => {
+    setPurgeDialog({ open: false });
+  }, []);
+
+  const openPurgeDialog = () => {
+    if (!selectedFile || actionInProgress) {
+      return;
+    }
+
+    setFileAction({ status: "idle" });
+    setPurgeDialog({
+      error: undefined,
+      file: selectedFile,
+      open: true
+    });
+  };
+
+  const permanentlyDeleteFile = async () => {
+    const file = purgeDialog.file;
+
+    if (!file) {
+      return;
+    }
+
+    const fileKey = createFileKey(file);
+
+    setPurgeDialog((current) => ({
+      ...current,
+      error: undefined
+    }));
+    setFileAction({
+      detail: file.name,
+      fileKey,
+      status: "purging",
+      title: "Permanently deleting item…"
+    });
+
+    try {
+      const result = await apiClient.permanentlyDeleteFile(
+        selectedProviderKey,
+        file
+      );
+
+      setFiles((currentFiles) =>
+        currentFiles.filter(
+          (currentFile) => createFileKey(currentFile) !== fileKey
+        )
+      );
+      setSelectedFileKey(undefined);
+      setPurgeDialog({ open: false });
+      setFileAction({
+        detail:
+          `${file.name} was removed from the current repository and ` +
+          "its reachable Git history.",
+        status: "success",
+        title: "Item permanently deleted"
+      });
+      refreshFiles(true);
+    } catch (error) {
+      setPurgeDialog((current) => ({
+        ...current,
+        error: error.message
+      }));
+      setFileAction({
+        detail: error.message,
+        fileKey,
+        status: "error",
+        title: "Permanent deletion failed"
+      });
+    }
+  };
+
   const canDelete =
     selectedProvider?.supportedFileActions?.includes("delete") || false;
-  const deletingFileKey =
-    fileAction.status === "deleting" ? fileAction.fileKey : undefined;
+  const canPurgeAzureHistory = hasPermission(
+    permissions.permanentlyDeleteFiles
+  );
+  const canPermanentlyDelete =
+    selectedProvider?.supportedFileActions?.includes(
+      "permanent-delete"
+    ) && canPurgeAzureHistory;
+  const workingFileKey = actionInProgress
+    ? fileAction.fileKey
+    : undefined;
 
   return (
     <AppShell activePage="files">
@@ -251,13 +348,26 @@ export function ManageFilesApp() {
 
           <ProviderSelector
             disabled={
-              providersLoading || fileAction.status === "deleting"
+              providersLoading || actionInProgress
             }
             onSelect={selectProvider}
             providers={providers}
             selectedProviderKey={selectedProviderKey}
           />
         </section>
+
+        {!canPurgeAzureHistory && (
+          <div className="admin-purge-notice" role="note">
+            <Icon name="lock" size={16} />
+            <span>
+              <strong>Administrator approval required</strong>
+              <small>
+                Permanent Azure deletions must be completed by an
+                administrator. Standard deletions remain available.
+              </small>
+            </span>
+          </div>
+        )}
 
         <section className="files-card" aria-live="polite">
           <header className="files-card-heading">
@@ -274,20 +384,35 @@ export function ManageFilesApp() {
                   : "Waiting for the latest cloud listing"}
               </p>
             </div>
-            <button
-              className="refresh-button"
-              disabled={
-                listing.loading ||
-                listing.refreshing ||
-                fileAction.status === "deleting" ||
-                !listingConfigured
-              }
-              onClick={() => refreshFiles(true)}
-              type="button"
-            >
-              <Icon name="refresh" size={16} />
-              Refresh
-            </button>
+            <div className="files-card-heading-actions">
+              {selectedFile &&
+                selectedProviderKey === "azure" &&
+                canPermanentlyDelete && (
+                  <button
+                    className="permanent-delete-button"
+                    disabled={actionInProgress}
+                    onClick={openPurgeDialog}
+                    type="button"
+                  >
+                    <Icon name="warning" size={15} />
+                    Permanent item deletion
+                  </button>
+                )}
+              <button
+                className="refresh-button"
+                disabled={
+                  listing.loading ||
+                  listing.refreshing ||
+                  actionInProgress ||
+                  !listingConfigured
+                }
+                onClick={() => refreshFiles(true)}
+                type="button"
+              >
+                <Icon name="refresh" size={16} />
+                Refresh
+              </button>
+            </div>
           </header>
 
           {fileAction.status !== "idle" && (
@@ -295,7 +420,7 @@ export function ManageFilesApp() {
               className={`file-action-status is-${fileAction.status}`}
               role={fileAction.status === "error" ? "alert" : "status"}
             >
-              {fileAction.status === "deleting" ? (
+              {actionInProgress ? (
                 <span className="file-action-spinner" />
               ) : (
                 <Icon
@@ -329,17 +454,25 @@ export function ManageFilesApp() {
           ) : listing.error && files.length === 0 ? null : (
             <FileList
               canDelete={canDelete}
-              deletingFileKey={deletingFileKey}
               files={files}
               onDelete={deleteFile}
               onDownload={downloadFile}
               onSelect={selectFile}
               providerName={selectedProvider?.displayName || "provider"}
               selectedFileKey={selectedFileKey}
+              workingFileKey={workingFileKey}
             />
           )}
         </section>
       </main>
+      <PermanentDeletionDialog
+        error={purgeDialog.error}
+        file={purgeDialog.file}
+        onCancel={closePurgeDialog}
+        onConfirm={permanentlyDeleteFile}
+        open={purgeDialog.open}
+        working={fileAction.status === "purging"}
+      />
     </AppShell>
   );
 }

@@ -45,6 +45,19 @@ const boxMaximumUploadSizeMb = parseNumber(
 );
 
 const environment = Object.freeze({
+  auth: Object.freeze({
+    secureCookies:
+      process.env.AUTH_SECURE_COOKIE === "true" ||
+      process.env.NODE_ENV === "production",
+    sessionDurationMs:
+      parseNumber("AUTH_SESSION_HOURS", 8, {
+        maximum: 168,
+        minimum: 1
+      }) *
+      60 *
+      60 *
+      1000
+  }),
   host: process.env.HOST || "127.0.0.1",
   port: parseNumber("PORT", 3000, {
     integer: true,
@@ -61,6 +74,8 @@ const environment = Object.freeze({
     ipv4Only: process.env.GIT_IPV4_ONLY === "true",
     maximumUploadSizeBytes: 100 * 1024 * 1024,
     pat: process.env.AZURE_DEVOPS_PAT,
+    purgePat:
+      process.env.AZURE_PURGE_PAT || process.env.AZURE_DEVOPS_PAT,
     remote: process.env.AZURE_GIT_REMOTE,
     shouldPush: process.env.AZURE_GIT_PUSH === "true"
   }),

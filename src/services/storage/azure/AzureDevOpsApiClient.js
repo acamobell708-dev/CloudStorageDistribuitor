@@ -230,7 +230,7 @@ class AzureDevOpsApiClient {
     );
   }
 
-  async createFilePush({
+  async createPush({
     changes,
     comment,
     oldObjectId =
@@ -247,16 +247,7 @@ class AzureDevOpsApiClient {
     const body = {
       commits: [
         {
-          changes: changes.map((change) => ({
-            changeType: "add",
-            item: {
-              path: change.path
-            },
-            newContent: {
-              content: change.content.toString("base64"),
-              contentType: "base64Encoded"
-            }
-          })),
+          changes,
           comment
         }
       ],
@@ -275,6 +266,38 @@ class AzureDevOpsApiClient {
         "Content-Type": "application/json"
       },
       method: "POST"
+    });
+  }
+
+  async createFilePush({ changes, comment, oldObjectId }) {
+    return this.createPush({
+      changes: changes.map((change) => ({
+        changeType: "add",
+        item: {
+          path: change.path
+        },
+        newContent: {
+          content: change.content.toString("base64"),
+          contentType: "base64Encoded"
+        }
+      })),
+      comment,
+      oldObjectId
+    });
+  }
+
+  async createFileDeletePush({ comment, oldObjectId, path: filePath }) {
+    return this.createPush({
+      changes: [
+        {
+          changeType: "delete",
+          item: {
+            path: filePath
+          }
+        }
+      ],
+      comment,
+      oldObjectId
     });
   }
 

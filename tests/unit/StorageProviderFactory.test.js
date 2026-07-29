@@ -28,4 +28,8 @@ test("creates the web Azure provider without local repository access", () => {
   assert.equal(provider.localDataRepositoryEnabled, false);
   assert.equal(provider.dataRepoRoot, undefined);
   assert.notEqual(provider.dataRepoRoot, cliRepositoryPath);
+  assert.deepEqual(provider.supportedFileActions, [
+    "download",
+    "delete"
+  ]);
 });

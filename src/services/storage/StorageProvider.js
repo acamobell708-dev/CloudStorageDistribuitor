@@ -118,6 +118,16 @@ class StorageProvider {
       }
     );
   }
+
+  async permanentlyDeleteCloudFile() {
+    throw new ValidationError(
+      `${this.displayName} does not support permanent file deletion`,
+      {
+        code: "UNSUPPORTED_FILE_ACTION",
+        statusCode: 405
+      }
+    );
+  }
 }
 
 module.exports = { StorageProvider };

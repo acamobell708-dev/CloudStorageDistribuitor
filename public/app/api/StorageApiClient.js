@@ -67,14 +67,18 @@ export class StorageApiClient {
 
   getFileDownloadUrl(provider, file) {
     const fileUrl = this.getFileUrl(provider, file);
+    return this.appendFileUrlSegment(fileUrl, "download");
+  }
+
+  appendFileUrlSegment(fileUrl, segment) {
     const queryIndex = fileUrl.indexOf("?");
 
     if (queryIndex === -1) {
-      return `${fileUrl}/download`;
+      return `${fileUrl}/${segment}`;
     }
 
     return (
-      `${fileUrl.slice(0, queryIndex)}/download` +
+      `${fileUrl.slice(0, queryIndex)}/${segment}` +
       fileUrl.slice(queryIndex)
     );
   }
@@ -86,6 +90,27 @@ export class StorageApiClient {
       },
       method: "DELETE"
     });
+    const body = await this.readJson(response);
+
+    if (!response.ok) {
+      throw this.createError(response, body);
+    }
+
+    return body;
+  }
+
+  async permanentlyDeleteFile(provider, file) {
+    const fileUrl = this.getFileUrl(provider, file);
+    const response = await fetch(
+      this.appendFileUrlSegment(fileUrl, "history"),
+      {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json"
+        },
+        method: "DELETE"
+      }
+    );
     const body = await this.readJson(response);
 
     if (!response.ok) {

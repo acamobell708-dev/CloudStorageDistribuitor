@@ -12,6 +12,7 @@ const providerPresentation = {
 };
 
 export function ProviderPanel({
+  disabled,
   loading,
   onSelect,
   providers,
@@ -49,6 +50,7 @@ export function ProviderPanel({
               available ? "" : "is-muted"
             }`}
             key={provider.key}
+            disabled={disabled}
             onClick={() => onSelect(provider.key)}
             type="button"
           >

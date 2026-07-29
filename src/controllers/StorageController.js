@@ -8,12 +8,14 @@ class StorageController {
     fileDownloadService,
     fileListingService,
     fileUploadService,
+    permanentFileDeletionService,
     providerFactory
   }) {
     this.fileDeletionService = fileDeletionService;
     this.fileDownloadService = fileDownloadService;
     this.fileListingService = fileListingService;
     this.fileUploadService = fileUploadService;
+    this.permanentFileDeletionService = permanentFileDeletionService;
     this.providerFactory = providerFactory;
   }
 
@@ -41,6 +43,22 @@ class StorageController {
     try {
       response.json(
         await this.fileDeletionService.delete(
+          request.params.provider,
+          {
+            id: request.params.fileId,
+            path: request.query.path
+          }
+        )
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  permanentlyDeleteFile = async (request, response, next) => {
+    try {
+      response.json(
+        await this.permanentFileDeletionService.delete(
           request.params.provider,
           {
             id: request.params.fileId,

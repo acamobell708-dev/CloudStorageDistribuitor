@@ -21,6 +21,9 @@ export default defineConfig({
         dashboard: fileURLToPath(
           new URL("./public/dashboard.html", import.meta.url)
         ),
+        login: fileURLToPath(
+          new URL("./public/login.html", import.meta.url)
+        ),
         main: fileURLToPath(new URL("./public/index.html", import.meta.url)),
         manageFiles: fileURLToPath(
           new URL("./public/manageFiles.html", import.meta.url)

@@ -1,7 +1,34 @@
 const assert = require("node:assert/strict");
+const { scryptSync } = require("node:crypto");
 const path = require("node:path");
 const test = require("node:test");
 const { createApp } = require("../../src/app");
+const {
+  memberPermissions,
+  permissions
+} = require("../../src/services/auth/permissions");
+const {
+  UserAccountService
+} = require("../../src/services/auth/UserAccountService");
+
+function createTestAccount({
+  password,
+  permissions: accountPermissions,
+  role,
+  username
+}) {
+  const salt = Buffer.from(`integration-${username}-salt`);
+
+  return {
+    displayName: username,
+    id: username.toLowerCase(),
+    passwordHash: scryptSync(password, salt, 64).toString("hex"),
+    permissions: accountPermissions,
+    role,
+    salt: salt.toString("hex"),
+    username
+  };
+}
 
 function createTestApplication(overrides = {}) {
   const createProvider = (key, displayName) => ({
@@ -27,7 +54,9 @@ function createTestApplication(overrides = {}) {
       maximumUploadSizeBytes:
         overrides.maximumUploadSizeBytes || 1024,
       supportedFileActions:
-        key === "box" ? ["download", "delete"] : ["download"]
+        key === "box"
+          ? ["download", "delete"]
+          : ["download", "delete", "permanent-delete"]
     }),
     isConfigured: () => true,
     isListingConfigured: () => true,
@@ -54,6 +83,19 @@ function createTestApplication(overrides = {}) {
         size: body.length
       };
     },
+    permanentlyDeleteCloudFile: async (fileReference) => {
+      overrides.onPermanentDelete?.(key, fileReference);
+
+      return {
+        filename: `${key}-file.txt`,
+        id: fileReference.id,
+        path: fileReference.path,
+        provider: key,
+        removed: true,
+        removedFromHistory: true,
+        verified: true
+      };
+    },
     listCloudFiles: async () => [
       {
         id: `${key}-file-1`,
@@ -68,7 +110,9 @@ function createTestApplication(overrides = {}) {
     maximumUploadSizeBytes:
       overrides.maximumUploadSizeBytes || 1024,
     supportedFileActions:
-      key === "box" ? ["download", "delete"] : ["download"],
+      key === "box"
+        ? ["download", "delete"]
+        : ["download", "delete", "permanent-delete"],
     uploadFile: async (file) => {
       overrides.onUpload?.(key, file);
 
@@ -96,10 +140,34 @@ function createTestApplication(overrides = {}) {
       ))
   };
   const environment = {
+    azure: {
+      purgePat: "purge-pat"
+    },
     projectRoot: path.join(__dirname, "missing-build")
   };
+  const userAccountService = new UserAccountService([
+    createTestAccount({
+      password: "owner-test-password",
+      permissions: [
+        ...memberPermissions,
+        permissions.permanentlyDeleteFiles
+      ],
+      role: "owner",
+      username: "TestOwner"
+    }),
+    createTestAccount({
+      password: "member-test-password",
+      permissions: memberPermissions,
+      role: "member",
+      username: "TestMember"
+    })
+  ]);
 
-  return createApp({ environment, providerFactory });
+  return createApp({
+    environment,
+    providerFactory,
+    userAccountService
+  });
 }
 
 async function withServer(app, callback) {
@@ -120,12 +188,170 @@ async function withServer(app, callback) {
   }
 }
 
-test("reports API health and configured storage providers", async () => {
+async function login(baseUrl, credentials = {}) {
+  const response = await fetch(`${baseUrl}/api/auth/login`, {
+    body: JSON.stringify({
+      password: credentials.password || "owner-test-password",
+      username: credentials.username || "TestOwner"
+    }),
+    headers: {
+      "Content-Type": "application/json"
+    },
+    method: "POST"
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200, body.error?.message);
+  return response.headers.get("set-cookie").split(";")[0];
+}
+
+async function withAuthenticatedServer(
+  app,
+  callback,
+  credentials
+) {
+  return withServer(app, async (baseUrl) => {
+    const cookie = await login(baseUrl, credentials);
+    const authenticatedFetch = (url, options = {}) =>
+      fetch(url, {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          Cookie: cookie
+        }
+      });
+
+    return callback(baseUrl, authenticatedFetch);
+  });
+}
+
+test("creates sessions and enforces guest storage restrictions", async () => {
   await withServer(createTestApplication(), async (baseUrl) => {
-    const health = await fetch(`${baseUrl}/api/health`).then((response) =>
-      response.json()
+    const unauthenticated = await fetch(
+      `${baseUrl}/api/storage/providers`
     );
-    const providers = await fetch(
+
+    assert.equal(unauthenticated.status, 401);
+
+    const invalidLogin = await fetch(`${baseUrl}/api/auth/login`, {
+      body: JSON.stringify({
+        password: "incorrect",
+        username: "TestOwner"
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const invalidBody = await invalidLogin.json();
+
+    assert.equal(invalidLogin.status, 401);
+    assert.equal(invalidBody.error.code, "INVALID_LOGIN");
+
+    const guestLogin = await fetch(`${baseUrl}/api/auth/guest`, {
+      method: "POST"
+    });
+    const guestBody = await guestLogin.json();
+    const guestCookie = guestLogin.headers
+      .get("set-cookie")
+      .split(";")[0];
+
+    assert.equal(guestBody.user.role, "guest");
+    assert.equal(
+      guestLogin.headers.get("set-cookie").includes("HttpOnly"),
+      true
+    );
+    assert.equal(
+      guestLogin.headers.get("set-cookie").includes("SameSite=Strict"),
+      true
+    );
+
+    const providerResponse = await fetch(
+      `${baseUrl}/api/storage/providers`,
+      {
+        headers: {
+          Cookie: guestCookie
+        }
+      }
+    );
+    const listResponse = await fetch(
+      `${baseUrl}/api/storage/box/files`,
+      {
+        headers: {
+          Cookie: guestCookie
+        }
+      }
+    );
+    const downloadResponse = await fetch(
+      `${baseUrl}/api/storage/box/files/box-file-1/download`,
+      {
+        headers: {
+          Cookie: guestCookie
+        }
+      }
+    );
+    const uploadResponse = await fetch(
+      `${baseUrl}/api/storage/box/files`,
+      {
+        headers: {
+          Cookie: guestCookie
+        },
+        method: "POST"
+      }
+    );
+    const deleteResponse = await fetch(
+      `${baseUrl}/api/storage/box/files/box-file-1`,
+      {
+        headers: {
+          Cookie: guestCookie
+        },
+        method: "DELETE"
+      }
+    );
+
+    assert.equal(providerResponse.status, 200);
+    assert.deepEqual(
+      [
+        listResponse.status,
+        downloadResponse.status,
+        uploadResponse.status,
+        deleteResponse.status
+      ],
+      [403, 403, 403, 403]
+    );
+    assert.equal(
+      (await listResponse.json()).error.code,
+      "INSUFFICIENT_PERMISSION"
+    );
+
+    const logoutResponse = await fetch(`${baseUrl}/api/auth/logout`, {
+      headers: {
+        Cookie: guestCookie
+      },
+      method: "POST"
+    });
+    const sessionResponse = await fetch(
+      `${baseUrl}/api/auth/session`,
+      {
+        headers: {
+          Cookie: guestCookie
+        }
+      }
+    );
+
+    assert.equal(logoutResponse.status, 200);
+    assert.equal((await sessionResponse.json()).authenticated, false);
+  });
+});
+
+test("reports API health and configured storage providers", async () => {
+  await withAuthenticatedServer(
+    createTestApplication(),
+    async (baseUrl, authenticatedFetch) => {
+    const health = await authenticatedFetch(
+      `${baseUrl}/api/health`
+    ).then((response) => response.json());
+    const providers = await authenticatedFetch(
       `${baseUrl}/api/storage/providers`
     ).then((response) => response.json());
 
@@ -137,7 +363,12 @@ test("reports API health and configured storage providers", async () => {
       ["download", "delete"]
     );
     assert.equal(providers.providers[1].key, "azure");
-  });
+    assert.deepEqual(
+      providers.providers[1].supportedFileActions,
+      ["download", "delete", "permanent-delete"]
+    );
+    }
+  );
 });
 
 test("routes a media upload to the selected Azure provider", async () => {
@@ -150,7 +381,7 @@ test("routes a media upload to the selected Azure provider", async () => {
     }
   });
 
-  await withServer(app, async (baseUrl) => {
+  await withAuthenticatedServer(app, async (baseUrl, authenticatedFetch) => {
     const form = new FormData();
     form.append(
       "file",
@@ -158,7 +389,7 @@ test("routes a media upload to the selected Azure provider", async () => {
       "photo.png"
     );
 
-    const response = await fetch(`${baseUrl}/api/storage/azure/files`, {
+    const response = await authenticatedFetch(`${baseUrl}/api/storage/azure/files`, {
       body: form,
       method: "POST"
     });
@@ -175,8 +406,10 @@ test("routes a media upload to the selected Azure provider", async () => {
 });
 
 test("lists current cloud files through the selected provider", async () => {
-  await withServer(createTestApplication(), async (baseUrl) => {
-    const response = await fetch(
+  await withAuthenticatedServer(
+    createTestApplication(),
+    async (baseUrl, authenticatedFetch) => {
+    const response = await authenticatedFetch(
       `${baseUrl}/api/storage/azure/files`
     );
     const body = await response.json();
@@ -187,12 +420,15 @@ test("lists current cloud files through the selected provider", async () => {
     assert.equal(body.files.length, 1);
     assert.equal(body.files[0].name, "azure-file.txt");
     assert.match(body.refreshedAt, /^\d{4}-\d{2}-\d{2}T/);
-  });
+    }
+  );
 });
 
 test("streams a selected cloud file to the browser as an attachment", async () => {
-  await withServer(createTestApplication(), async (baseUrl) => {
-    const response = await fetch(
+  await withAuthenticatedServer(
+    createTestApplication(),
+    async (baseUrl, authenticatedFetch) => {
+    const response = await authenticatedFetch(
       `${baseUrl}/api/storage/azure/files/azure-file-1/download?` +
         new URLSearchParams({ path: "/azure-file.txt" })
     );
@@ -204,7 +440,8 @@ test("streams a selected cloud file to the browser as an attachment", async () =
       /attachment; filename="azure-file\.txt"/
     );
     assert.equal(await response.text(), "azure-download");
-  });
+    }
+  );
 });
 
 test("deletes a selected Box file through the shared storage route", async () => {
@@ -216,8 +453,8 @@ test("deletes a selected Box file through the shared storage route", async () =>
     }
   });
 
-  await withServer(app, async (baseUrl) => {
-    const response = await fetch(
+  await withAuthenticatedServer(app, async (baseUrl, authenticatedFetch) => {
+    const response = await authenticatedFetch(
       `${baseUrl}/api/storage/box/files/box-file-1?` +
         new URLSearchParams({ path: "/box-file.txt" }),
       {
@@ -236,8 +473,89 @@ test("deletes a selected Box file through the shared storage route", async () =>
   });
 });
 
+test("creates a normal deletion for a selected Azure file", async () => {
+  let deletedReference;
+  const app = createTestApplication({
+    onDelete: (providerKey, fileReference) => {
+      assert.equal(providerKey, "azure");
+      deletedReference = fileReference;
+    }
+  });
+
+  await withAuthenticatedServer(app, async (baseUrl, authenticatedFetch) => {
+    const response = await authenticatedFetch(
+      `${baseUrl}/api/storage/azure/files/azure-file-1?` +
+        new URLSearchParams({ path: "/azure-file.txt" }),
+      {
+        method: "DELETE"
+      }
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.file.removed, true);
+    assert.equal(
+      body.message,
+      "azure-file.txt was deleted from Azure Repos"
+    );
+    assert.deepEqual(deletedReference, {
+      id: "azure-file-1",
+      path: "/azure-file.txt"
+    });
+  });
+});
+
+test("requires the owner account before permanently deleting Azure history", async () => {
+  let permanentDeleteCount = 0;
+  const app = createTestApplication({
+    onPermanentDelete: () => {
+      permanentDeleteCount += 1;
+    }
+  });
+  const url =
+    "/api/storage/azure/files/azure-file-1/history?" +
+    new URLSearchParams({ path: "/azure-file.txt" });
+
+  await withServer(app, async (baseUrl) => {
+    const memberCookie = await login(baseUrl, {
+      password: "member-test-password",
+      username: "TestMember"
+    });
+    const deniedResponse = await fetch(`${baseUrl}${url}`, {
+      headers: {
+        Cookie: memberCookie
+      },
+      method: "DELETE"
+    });
+    const deniedBody = await deniedResponse.json();
+
+    assert.equal(deniedResponse.status, 403);
+    assert.equal(
+      deniedBody.error.code,
+      "INSUFFICIENT_PERMISSION"
+    );
+    assert.equal(permanentDeleteCount, 0);
+
+    const ownerCookie = await login(baseUrl);
+    const response = await fetch(`${baseUrl}${url}`, {
+      headers: {
+        Cookie: ownerCookie
+      },
+      method: "DELETE"
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.file.removedFromHistory, true);
+    assert.match(body.message, /reachable history/);
+    assert.equal(permanentDeleteCount, 1);
+  });
+});
+
 test("accepts a browser multipart upload and returns the Box result", async () => {
-  await withServer(createTestApplication(), async (baseUrl) => {
+  await withAuthenticatedServer(
+    createTestApplication(),
+    async (baseUrl, authenticatedFetch) => {
     const form = new FormData();
     form.append(
       "file",
@@ -245,7 +563,7 @@ test("accepts a browser multipart upload and returns the Box result", async () =
       "hello.txt"
     );
 
-    const response = await fetch(`${baseUrl}/api/storage/box/files`, {
+    const response = await authenticatedFetch(`${baseUrl}/api/storage/box/files`, {
       body: form,
       method: "POST"
     });
@@ -255,17 +573,18 @@ test("accepts a browser multipart upload and returns the Box result", async () =
     assert.equal(body.file.id, "box-file-1");
     assert.equal(body.file.originalName, "hello.txt");
     assert.equal(body.message, "hello.txt was sent to Box");
-  });
+    }
+  );
 });
 
 test("rejects a browser upload above the server limit", async () => {
-  await withServer(
+  await withAuthenticatedServer(
     createTestApplication({ maximumUploadSizeBytes: 3 }),
-    async (baseUrl) => {
+    async (baseUrl, authenticatedFetch) => {
       const form = new FormData();
       form.append("file", new Blob(["four"]), "too-large.txt");
 
-      const response = await fetch(`${baseUrl}/api/storage/box/files`, {
+      const response = await authenticatedFetch(`${baseUrl}/api/storage/box/files`, {
         body: form,
         method: "POST"
       });
