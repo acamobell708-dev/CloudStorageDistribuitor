@@ -165,7 +165,7 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-03-01'
   location: location
   properties: {
     appLogsConfiguration: {
-      destination: 'none'
+      destination: 'azure-monitor'
     }
   }
 }

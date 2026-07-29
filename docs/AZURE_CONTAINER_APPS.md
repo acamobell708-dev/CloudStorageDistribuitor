@@ -58,9 +58,10 @@ az account set --subscription $deploymentSubscriptionId
 az provider register --namespace Microsoft.App
 ```
 
-The template disables Log Analytics application-log storage to avoid an
-unexpected logging bill. Platform status and revision information remain
-available in the portal, but historical application logs are not retained.
+The template routes logs through Azure Monitor but does not create a diagnostic
+setting or Log Analytics workspace, avoiding persistent application-log
+storage and its associated cost. Platform status, revision information, and
+real-time log streaming remain available in the portal.
 
 ## Step 5: create the Azure resource group
 
