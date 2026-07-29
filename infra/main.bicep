@@ -5,7 +5,7 @@ param location string = resourceGroup().location
 
 @description('Globally unique Container App name.')
 @minLength(2)
-@maxLength(32)
+@maxLength(31)
 param containerAppName string
 
 @description('Container Apps managed environment name.')
@@ -57,16 +57,9 @@ param registryUsername string = ''
 @description('Optional read-only private registry token.')
 param registryPassword string = ''
 
-var boxConfigured = !empty(boxClientId) &&
-  !empty(boxClientSecret) &&
-  !empty(boxEnterpriseId) &&
-  !empty(boxFolderId)
-var separatePurgeIdentityConfigured =
-  !empty(purgeManagedIdentityResourceId) &&
-  !empty(purgeManagedIdentityClientId)
-var privateRegistryConfigured =
-  !empty(registryUsername) &&
-  !empty(registryPassword)
+var boxConfigured = !empty(boxClientId) && !empty(boxClientSecret) && !empty(boxEnterpriseId) && !empty(boxFolderId)
+var separatePurgeIdentityConfigured = !empty(purgeManagedIdentityResourceId) && !empty(purgeManagedIdentityClientId)
+var privateRegistryConfigured = !empty(registryUsername) && !empty(registryPassword)
 
 var boxSecrets = boxConfigured ? [
   {
@@ -125,8 +118,7 @@ var registryConfiguration = privateRegistryConfigured ? [
   }
 ] : []
 
-var purgeIdentityEnvironmentVariables =
-  separatePurgeIdentityConfigured ? [
+var purgeIdentityEnvironmentVariables = separatePurgeIdentityConfigured ? [
     {
       name: 'AZURE_PURGE_MANAGED_IDENTITY_CLIENT_ID'
       value: purgeManagedIdentityClientId
