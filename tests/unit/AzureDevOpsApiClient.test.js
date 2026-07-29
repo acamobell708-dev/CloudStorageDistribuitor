@@ -71,6 +71,61 @@ test("lists the latest remote branch through the Azure DevOps REST API", async (
   assert.equal(calls[0].url.includes("secret-pat"), false);
 });
 
+test("adds blob sizes from one recursive Azure tree request", async () => {
+  const calls = [];
+  const client = new AzureDevOpsApiClient({
+    branch: "main",
+    fetch: async (url) => {
+      calls.push(url);
+
+      if (url.includes("/trees/")) {
+        return Response.json({
+          treeEntries: [
+            {
+              gitObjectType: "blob",
+              objectId: "blob-id",
+              relativePath: "images/photo.png",
+              size: 4096
+            }
+          ]
+        });
+      }
+
+      return Response.json({
+        value: [
+          {
+            gitObjectType: "tree",
+            isFolder: true,
+            objectId: "root-tree-id",
+            path: "/"
+          },
+          {
+            gitObjectType: "blob",
+            objectId: "blob-id",
+            path: "/images/photo.png"
+          }
+        ]
+      });
+    },
+    pat: "secret-pat",
+    remote:
+      "https://organization@dev.azure.com/organization/project/_git/media"
+  });
+
+  const items = await client.listRepositoryItems({
+    includeSizes: true
+  });
+  const file = items.find((item) => item.objectId === "blob-id");
+  const treeRequest = new URL(
+    calls.find((url) => url.includes("/trees/"))
+  );
+
+  assert.equal(file.size, 4096);
+  assert.equal(calls.length, 2);
+  assert.equal(treeRequest.searchParams.get("recursive"), "true");
+  assert.match(treeRequest.pathname, /\/trees\/root-tree-id$/);
+});
+
 test("uses an injected bearer authorization provider", async () => {
   const calls = [];
   const client = new AzureDevOpsApiClient({

@@ -36,6 +36,11 @@ const {
   UserAccountService
 } = require("./services/auth/UserAccountService");
 
+const CLIENT_HTML_CACHE_CONTROL =
+  "private, no-cache, must-revalidate";
+const CLIENT_ASSET_CACHE_CONTROL =
+  "public, max-age=31536000, immutable";
+
 function setSecurityHeaders(request, response, next) {
   response.set({
     "Content-Security-Policy":
@@ -47,6 +52,18 @@ function setSecurityHeaders(request, response, next) {
     "X-Frame-Options": "DENY"
   });
   next();
+}
+
+function setClientCacheHeaders(response, filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  const isHashedAsset = /[\\/]assets[\\/]/.test(filePath);
+
+  response.setHeader(
+    "Cache-Control",
+    isHashedAsset && extension !== ".html"
+      ? CLIENT_ASSET_CACHE_CONTROL
+      : CLIENT_HTML_CACHE_CONTROL
+  );
 }
 
 function createApp(options = {}) {
@@ -127,7 +144,7 @@ function createApp(options = {}) {
       express.static(clientBuildDirectory, {
         fallthrough: true,
         index: false,
-        maxAge: "1h"
+        setHeaders: setClientCacheHeaders
       })
     );
     app.use((request, response, next) => {
@@ -141,6 +158,7 @@ function createApp(options = {}) {
         return;
       }
 
+      response.set("Cache-Control", CLIENT_HTML_CACHE_CONTROL);
       response.sendFile(path.join(clientBuildDirectory, "index.html"));
     });
   }
@@ -149,4 +167,9 @@ function createApp(options = {}) {
   return app;
 }
 
-module.exports = { createApp };
+module.exports = {
+  CLIENT_ASSET_CACHE_CONTROL,
+  CLIENT_HTML_CACHE_CONTROL,
+  createApp,
+  setClientCacheHeaders
+};

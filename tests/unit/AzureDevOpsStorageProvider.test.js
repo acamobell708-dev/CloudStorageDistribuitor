@@ -126,34 +126,39 @@ test("returns a versioned Azure result through the common upload contract", asyn
 });
 
 test("normalizes files returned by the remote Azure listing client", async () => {
+  let listingOptions;
   const apiClient = {
     createFileWebUrl: (filePath) =>
       `https://azure.test/repository?path=${encodeURIComponent(filePath)}`,
     isConfigured: () => true,
-    listRepositoryItems: async () => [
-      {
-        gitObjectType: "tree",
-        isFolder: true,
-        objectId: "folder",
-        path: "/images"
-      },
-      {
-        commitId: "commit-123",
-        contentMetadata: {
-          contentType: "image/png"
+    listRepositoryItems: async (options) => {
+      listingOptions = options;
+
+      return [
+        {
+          gitObjectType: "tree",
+          isFolder: true,
+          objectId: "folder",
+          path: "/images"
         },
-        gitObjectType: "blob",
-        isFolder: false,
-        latestProcessedChange: {
-          committer: {
-            date: "2026-07-28T12:00:00Z"
-          }
-        },
-        objectId: "blob-123",
-        path: "/images/photo.png",
-        size: 2048
-      }
-    ]
+        {
+          commitId: "commit-123",
+          contentMetadata: {
+            contentType: "image/png"
+          },
+          gitObjectType: "blob",
+          isFolder: false,
+          latestProcessedChange: {
+            committer: {
+              date: "2026-07-28T12:00:00Z"
+            }
+          },
+          objectId: "blob-123",
+          path: "/images/photo.png",
+          size: 2048
+        }
+      ];
+    }
   };
   const provider = createProvider({ apiClient });
 
@@ -165,6 +170,7 @@ test("normalizes files returned by the remote Azure listing client", async () =>
   assert.equal(files[0].provider, "azure");
   assert.equal(files[0].size, 2048);
   assert.equal(files[0].version, "commit-123");
+  assert.deepEqual(listingOptions, { includeSizes: true });
 });
 
 test("downloads only a file present on the configured Azure branch", async () => {

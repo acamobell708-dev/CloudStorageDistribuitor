@@ -390,7 +390,9 @@ class AzureDevOpsStorageProvider extends StorageProvider {
   }
 
   async listCloudFiles() {
-    const items = await this.apiClient.listRepositoryItems();
+    const items = await this.apiClient.listRepositoryItems({
+      includeSizes: true
+    });
 
     return items
       .filter(
@@ -399,7 +401,10 @@ class AzureDevOpsStorageProvider extends StorageProvider {
           String(item.gitObjectType || "").toLowerCase() === "blob"
       )
       .map((item) => {
-        const numericSize = Number(item.size);
+        const numericSize =
+          item.size === undefined || item.size === null
+            ? Number.NaN
+            : Number(item.size);
         const modifiedAt =
           item.latestProcessedChange?.committer?.date ||
           item.latestProcessedChange?.author?.date;

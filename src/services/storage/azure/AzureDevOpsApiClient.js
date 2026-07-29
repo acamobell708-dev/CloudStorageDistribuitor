@@ -204,7 +204,7 @@ class AzureDevOpsApiClient {
     }
   }
 
-  async listRepositoryItems() {
+  async listRepositoryItems(options = {}) {
     const { apiBaseUrl } = this.getRepositoryDetails();
     const query = new URLSearchParams({
       "api-version": "7.1",
@@ -223,7 +223,57 @@ class AzureDevOpsApiClient {
       }
     );
 
-    return Array.isArray(result?.value) ? result.value : [];
+    const items = Array.isArray(result?.value) ? result.value : [];
+
+    if (!options.includeSizes) {
+      return items;
+    }
+
+    const rootTree = items.find(
+      (item) =>
+        item.path === "/" &&
+        String(item.gitObjectType || "").toLowerCase() === "tree"
+    );
+
+    if (!rootTree?.objectId) {
+      return items;
+    }
+
+    const treeEntries = await this.listRepositoryTreeEntries(
+      rootTree.objectId
+    );
+    const sizeByObjectId = new Map(
+      treeEntries
+        .filter(
+          (entry) =>
+            String(entry.gitObjectType || "").toLowerCase() === "blob" &&
+            entry.objectId &&
+            Number.isFinite(Number(entry.size))
+        )
+        .map((entry) => [entry.objectId, Number(entry.size)])
+    );
+
+    return items.map((item) => {
+      const size = sizeByObjectId.get(item.objectId);
+
+      return size === undefined ? item : { ...item, size };
+    });
+  }
+
+  async listRepositoryTreeEntries(treeObjectId) {
+    const { apiBaseUrl } = this.getRepositoryDetails();
+    const query = new URLSearchParams({
+      "api-version": "7.1",
+      recursive: "true"
+    });
+    const tree = await this.requestJson(
+      `${apiBaseUrl}/trees/${encodeURIComponent(treeObjectId)}?${query}`,
+      {
+        action: "Reading Azure Repos file sizes"
+      }
+    );
+
+    return Array.isArray(tree?.treeEntries) ? tree.treeEntries : [];
   }
 
   async getBranchReference() {

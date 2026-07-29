@@ -419,6 +419,7 @@ test("lists current cloud files through the selected provider", async () => {
     assert.equal(body.provider.key, "azure");
     assert.equal(body.files.length, 1);
     assert.equal(body.files[0].name, "azure-file.txt");
+    assert.equal(body.files[0].size, 12);
     assert.match(body.refreshedAt, /^\d{4}-\d{2}-\d{2}T/);
     }
   );
