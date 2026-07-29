@@ -48,7 +48,7 @@ export class StorageApiClient {
     return body;
   }
 
-  getFileDownloadUrl(provider, file) {
+  getFileUrl(provider, file) {
     const providerKey = encodeURIComponent(provider);
     const fileId = encodeURIComponent(file?.id || "");
     const query = new URLSearchParams();
@@ -60,9 +60,39 @@ export class StorageApiClient {
     const queryString = query.toString();
 
     return (
-      `${this.baseUrl}/storage/${providerKey}/files/${fileId}/download` +
+      `${this.baseUrl}/storage/${providerKey}/files/${fileId}` +
       (queryString ? `?${queryString}` : "")
     );
+  }
+
+  getFileDownloadUrl(provider, file) {
+    const fileUrl = this.getFileUrl(provider, file);
+    const queryIndex = fileUrl.indexOf("?");
+
+    if (queryIndex === -1) {
+      return `${fileUrl}/download`;
+    }
+
+    return (
+      `${fileUrl.slice(0, queryIndex)}/download` +
+      fileUrl.slice(queryIndex)
+    );
+  }
+
+  async deleteFile(provider, file) {
+    const response = await fetch(this.getFileUrl(provider, file), {
+      headers: {
+        Accept: "application/json"
+      },
+      method: "DELETE"
+    });
+    const body = await this.readJson(response);
+
+    if (!response.ok) {
+      throw this.createError(response, body);
+    }
+
+    return body;
   }
 
   uploadFile({ file, onProgress, provider = "box" }) {

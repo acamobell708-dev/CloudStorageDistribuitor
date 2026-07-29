@@ -25,11 +25,23 @@ function createTestApplication(overrides = {}) {
       key,
       listingConfigured: true,
       maximumUploadSizeBytes:
-        overrides.maximumUploadSizeBytes || 1024
+        overrides.maximumUploadSizeBytes || 1024,
+      supportedFileActions:
+        key === "box" ? ["download", "delete"] : ["download"]
     }),
     isConfigured: () => true,
     isListingConfigured: () => true,
     key,
+    deleteCloudFile: async (fileReference) => {
+      overrides.onDelete?.(key, fileReference);
+
+      return {
+        filename: `${key}-file.txt`,
+        id: fileReference.id,
+        provider: key,
+        removed: true
+      };
+    },
     downloadCloudFile: async (fileReference) => {
       const body = Buffer.from(`${key}-download`);
 
@@ -55,6 +67,8 @@ function createTestApplication(overrides = {}) {
     ],
     maximumUploadSizeBytes:
       overrides.maximumUploadSizeBytes || 1024,
+    supportedFileActions:
+      key === "box" ? ["download", "delete"] : ["download"],
     uploadFile: async (file) => {
       overrides.onUpload?.(key, file);
 
@@ -118,6 +132,10 @@ test("reports API health and configured storage providers", async () => {
     assert.equal(health.status, "ok");
     assert.equal(providers.providers[0].key, "box");
     assert.equal(providers.providers[0].configured, true);
+    assert.deepEqual(
+      providers.providers[0].supportedFileActions,
+      ["download", "delete"]
+    );
     assert.equal(providers.providers[1].key, "azure");
   });
 });
@@ -186,6 +204,35 @@ test("streams a selected cloud file to the browser as an attachment", async () =
       /attachment; filename="azure-file\.txt"/
     );
     assert.equal(await response.text(), "azure-download");
+  });
+});
+
+test("deletes a selected Box file through the shared storage route", async () => {
+  let deletedReference;
+  const app = createTestApplication({
+    onDelete: (providerKey, fileReference) => {
+      assert.equal(providerKey, "box");
+      deletedReference = fileReference;
+    }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const response = await fetch(
+      `${baseUrl}/api/storage/box/files/box-file-1?` +
+        new URLSearchParams({ path: "/box-file.txt" }),
+      {
+        method: "DELETE"
+      }
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.file.removed, true);
+    assert.equal(body.message, "box-file.txt was deleted from Box");
+    assert.deepEqual(deletedReference, {
+      id: "box-file-1",
+      path: "/box-file.txt"
+    });
   });
 });
 

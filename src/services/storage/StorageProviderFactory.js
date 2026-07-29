@@ -51,7 +51,8 @@ class StorageProviderFactory {
             displayName: provider.displayName,
             key: provider.key,
             listingConfigured: provider.isListingConfigured(),
-            maximumUploadSizeBytes: provider.maximumUploadSizeBytes
+            maximumUploadSizeBytes: provider.maximumUploadSizeBytes,
+            supportedFileActions: provider.supportedFileActions
           };
         }
       })

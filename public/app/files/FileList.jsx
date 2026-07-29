@@ -43,7 +43,10 @@ function handleRowKeyDown(event, file, onSelect) {
 }
 
 export function FileList({
+  canDelete,
+  deletingFileKey,
   files,
+  onDelete,
   onDownload,
   onSelect,
   providerName,
@@ -80,6 +83,7 @@ export function FileList({
           {files.map((file) => {
             const fileKey = createFileKey(file);
             const selected = selectedFileKey === fileKey;
+            const deleting = deletingFileKey === fileKey;
 
             return (
               <tr
@@ -93,7 +97,7 @@ export function FileList({
                 tabIndex="0"
                 title={
                   selected
-                    ? `Download ${file.name}`
+                    ? `Manage ${file.name}`
                     : `Select ${file.name}`
                 }
               >
@@ -105,18 +109,36 @@ export function FileList({
                     {file.name}
                   </span>
                   {selected && (
-                    <button
-                      aria-label={`Download ${file.name}`}
-                      className="file-download-button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDownload(file);
-                      }}
-                      type="button"
-                    >
-                      <Icon name="download" size={16} />
-                      Download File
-                    </button>
+                    <span className="file-row-actions">
+                      <button
+                        aria-label={`Download ${file.name}`}
+                        className="file-action-button file-download-button"
+                        disabled={deleting}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDownload(file);
+                        }}
+                        type="button"
+                      >
+                        <Icon name="download" size={16} />
+                        Download File
+                      </button>
+                      {canDelete && (
+                        <button
+                          aria-label={`Delete ${file.name}`}
+                          className="file-action-button file-delete-button"
+                          disabled={deleting}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onDelete(file);
+                          }}
+                          type="button"
+                        >
+                          <Icon name="trash" size={15} />
+                          Delete item
+                        </button>
+                      )}
+                    </span>
                   )}
                 </td>
                 <td data-label="Location" title={file.path}>

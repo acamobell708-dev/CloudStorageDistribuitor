@@ -95,6 +95,14 @@ const paths = {
       <path d="m8.8 12 2.2 2.2 4.4-4.5" />
     </>
   ),
+  trash: (
+    <>
+      <path d="M5.5 7h13" />
+      <path d="m9 7 .7-2h4.6l.7 2" />
+      <path d="m7 7 .8 13h8.4L17 7" />
+      <path d="M10 10.5v6M14 10.5v6" />
+    </>
+  ),
   upload: (
     <>
       <path d="M12 16V5" />

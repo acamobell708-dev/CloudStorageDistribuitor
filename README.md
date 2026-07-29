@@ -10,7 +10,7 @@ repository from one browser interface. Cloud credentials remain on the server.
 - Original stored filenames with internal content hashes and duplicate detection.
 - Direct and chunked Box uploads.
 - Versioned Azure uploads sent directly to the remote repository API.
-- Live Box and Azure file management with streamed browser downloads.
+- Live Box and Azure file management with streamed downloads and Box deletion.
 - Shared provider base class and factory for adding future storage services.
 
 ## Upload support
@@ -48,6 +48,10 @@ through its folder API, while Azure is read from the configured remote branch
 through the Azure DevOps Items REST API. Selecting a row exposes its download
 action. The server verifies the current cloud item, then streams it to the
 browser without exposing provider credentials or writing another local copy.
+For Box, the selected-row delete action verifies the configured parent folder,
+waits for Box to confirm deletion, and refreshes the cloud listing. Box
+enterprise settings determine whether deletion moves the item to trash or
+removes it permanently.
 
 Browser-safe UI code is under `public/`. Credentials, validation, processing,
 API routes, and provider integrations are under `src/`.
@@ -68,7 +72,7 @@ BOX_MAX_UPLOAD_SIZE_MB=250
 ```
 
 The Box Platform application must use Client Credentials Grant, be authorized
-by the enterprise, and have upload access to `BOX_FOLDER_ID`.
+by the enterprise, and have read/write access to `BOX_FOLDER_ID`.
 
 ### Azure Repos
 
@@ -141,6 +145,7 @@ secrets.
 | `GET` | `/api/storage/providers` | Provider capabilities and current limits |
 | `GET` | `/api/storage/:provider/files` | List the provider's latest cloud files |
 | `GET` | `/api/storage/:provider/files/:fileId/download` | Stream the selected current cloud file |
+| `DELETE` | `/api/storage/:provider/files/:fileId` | Delete a supported provider file |
 | `POST` | `/api/storage/box/files` | Upload one multipart `file` to Box |
 | `POST` | `/api/storage/azure/files` | Upload one multipart `file` to Azure Repos |
 

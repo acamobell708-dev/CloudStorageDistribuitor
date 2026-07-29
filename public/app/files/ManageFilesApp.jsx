@@ -17,11 +17,18 @@ export function ManageFilesApp() {
   const [providersLoading, setProvidersLoading] = useState(true);
   const [selectedProviderKey, setSelectedProviderKey] = useState("box");
   const [selectedFileKey, setSelectedFileKey] = useState();
-  const [refreshCount, setRefreshCount] = useState(0);
+  const [fileAction, setFileAction] = useState({
+    status: "idle"
+  });
+  const [refreshRequest, setRefreshRequest] = useState({
+    background: false,
+    sequence: 0
+  });
   const [listing, setListing] = useState({
     error: undefined,
     loading: false,
-    refreshedAt: undefined
+    refreshedAt: undefined,
+    refreshing: false
   });
   const selectedProvider = providers.find(
     (provider) => provider.key === selectedProviderKey
@@ -53,7 +60,8 @@ export function ManageFilesApp() {
           setListing({
             error: error.message,
             loading: false,
-            refreshedAt: undefined
+            refreshedAt: undefined,
+            refreshing: false
           });
         }
       })
@@ -81,7 +89,8 @@ export function ManageFilesApp() {
             `Configure the server-side ${selectedProvider.key === "azure" ? "AZURE_*" : "BOX_*"} ` +
             `values to list ${selectedProvider.displayName} files.`,
           loading: false,
-          refreshedAt: undefined
+          refreshedAt: undefined,
+          refreshing: false
         });
       }
 
@@ -90,11 +99,13 @@ export function ManageFilesApp() {
 
     const controller = new AbortController();
     let active = true;
+    const backgroundRefresh = refreshRequest.background;
 
     setListing((current) => ({
       ...current,
       error: undefined,
-      loading: true
+      loading: !backgroundRefresh,
+      refreshing: backgroundRefresh
     }));
     setSelectedFileKey(undefined);
 
@@ -111,16 +122,20 @@ export function ManageFilesApp() {
         setListing({
           error: undefined,
           loading: false,
-          refreshedAt: result.refreshedAt
+          refreshedAt: result.refreshedAt,
+          refreshing: false
         });
       })
       .catch((error) => {
         if (active && error.name !== "AbortError") {
-          setFiles([]);
+          if (!backgroundRefresh) {
+            setFiles([]);
+          }
           setListing({
             error: error.message,
             loading: false,
-            refreshedAt: undefined
+            refreshedAt: undefined,
+            refreshing: false
           });
         }
       });
@@ -133,27 +148,89 @@ export function ManageFilesApp() {
     apiClient,
     listingConfigured,
     providersLoading,
-    refreshCount,
+    refreshRequest,
     selectedProvider,
     selectedProviderKey
   ]);
 
   const selectProvider = (providerKey) => {
+    setFiles([]);
+    setFileAction({ status: "idle" });
     setSelectedFileKey(undefined);
+    setRefreshRequest((current) => ({
+      ...current,
+      background: false
+    }));
     setSelectedProviderKey(providerKey);
   };
 
   const selectFile = (file) => {
+    if (fileAction.status === "deleting") {
+      return;
+    }
+
     const fileKey = createFileKey(file);
 
+    setFileAction({ status: "idle" });
     setSelectedFileKey((currentKey) =>
       currentKey === fileKey ? undefined : fileKey
     );
   };
 
+  const refreshFiles = (background = true) => {
+    setRefreshRequest((current) => ({
+      background,
+      sequence: current.sequence + 1
+    }));
+  };
+
   const downloadFile = (file) => {
     downloadService.download(selectedProviderKey, file);
   };
+
+  const deleteFile = async (file) => {
+    const fileKey = createFileKey(file);
+
+    setFileAction({
+      detail: file.name,
+      fileKey,
+      status: "deleting",
+      title: "Deleting item…"
+    });
+
+    try {
+      const result = await apiClient.deleteFile(
+        selectedProviderKey,
+        file
+      );
+      setFiles((currentFiles) =>
+        currentFiles.filter(
+          (currentFile) => createFileKey(currentFile) !== fileKey
+        )
+      );
+      setSelectedFileKey(undefined);
+      setFileAction({
+        detail:
+          `${file.name} was deleted from ` +
+          `${result.provider.displayName}.`,
+        status: "success",
+        title: "Item deleted"
+      });
+      refreshFiles(true);
+    } catch (error) {
+      setFileAction({
+        detail: error.message,
+        fileKey,
+        status: "error",
+        title: "Delete failed"
+      });
+    }
+  };
+
+  const canDelete =
+    selectedProvider?.supportedFileActions?.includes("delete") || false;
+  const deletingFileKey =
+    fileAction.status === "deleting" ? fileAction.fileKey : undefined;
 
   return (
     <AppShell activePage="files">
@@ -167,13 +244,15 @@ export function ManageFilesApp() {
             <h1>Manage files</h1>
             <p>
               Choose a provider to read the latest contents directly from its
-              cloud service. Select a row to download that file while
-              credentials and access tokens remain on the server.
+              cloud service. Select a row to manage that file while credentials
+              and access tokens remain on the server.
             </p>
           </div>
 
           <ProviderSelector
-            disabled={providersLoading}
+            disabled={
+              providersLoading || fileAction.status === "deleting"
+            }
             onSelect={selectProvider}
             providers={providers}
             selectedProviderKey={selectedProviderKey}
@@ -187,22 +266,53 @@ export function ManageFilesApp() {
               <h2>{selectedProvider?.displayName || "Storage files"}</h2>
               <p>
                 {listing.refreshedAt
-                  ? `Refreshed ${new Date(
-                      listing.refreshedAt
-                    ).toLocaleTimeString()}`
+                  ? listing.refreshing
+                    ? "Refreshing cloud contents…"
+                    : `Refreshed ${new Date(
+                        listing.refreshedAt
+                      ).toLocaleTimeString()}`
                   : "Waiting for the latest cloud listing"}
               </p>
             </div>
             <button
               className="refresh-button"
-              disabled={listing.loading || !listingConfigured}
-              onClick={() => setRefreshCount((count) => count + 1)}
+              disabled={
+                listing.loading ||
+                listing.refreshing ||
+                fileAction.status === "deleting" ||
+                !listingConfigured
+              }
+              onClick={() => refreshFiles(true)}
               type="button"
             >
               <Icon name="refresh" size={16} />
               Refresh
             </button>
           </header>
+
+          {fileAction.status !== "idle" && (
+            <div
+              className={`file-action-status is-${fileAction.status}`}
+              role={fileAction.status === "error" ? "alert" : "status"}
+            >
+              {fileAction.status === "deleting" ? (
+                <span className="file-action-spinner" />
+              ) : (
+                <Icon
+                  name={
+                    fileAction.status === "success"
+                      ? "check"
+                      : "warning"
+                  }
+                  size={16}
+                />
+              )}
+              <span>
+                <strong>{fileAction.title}</strong>
+                <small>{fileAction.detail}</small>
+              </span>
+            </div>
+          )}
 
           {listing.error && (
             <div className="alert files-alert" role="alert">
@@ -216,9 +326,12 @@ export function ManageFilesApp() {
               <span className="loading-spinner" />
               <strong>Reading the latest cloud files…</strong>
             </div>
-          ) : listing.error ? null : (
+          ) : listing.error && files.length === 0 ? null : (
             <FileList
+              canDelete={canDelete}
+              deletingFileKey={deletingFileKey}
               files={files}
+              onDelete={deleteFile}
               onDownload={downloadFile}
               onSelect={selectFile}
               providerName={selectedProvider?.displayName || "provider"}

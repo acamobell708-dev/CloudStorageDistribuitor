@@ -313,3 +313,62 @@ test("opens a configured-folder Box file as a browser download stream", async ()
   assert.equal(await new Response(download.body).text(), "box report");
   assert.match(apiClient.calls[1].url, /files\/file-1\/content/);
 });
+
+test("deletes only a file from the configured Box folder", async () => {
+  const apiClient = createApiClient([
+    {
+      id: "file-1",
+      etag: "file-etag",
+      name: "report.txt",
+      parent: {
+        id: "123"
+      },
+      size: 10,
+      type: "file"
+    }
+  ]);
+  apiClient.request = async (url, options) => {
+    apiClient.calls.push({ options, url });
+    return new Response(undefined, { status: 204 });
+  };
+  const provider = new BoxStorageProvider({
+    accountMaximumUploadSizeBytes: 1024,
+    apiClient,
+    folderId: "123"
+  });
+
+  const result = await provider.deleteCloudFile({ id: "file-1" });
+
+  assert.equal(result.filename, "report.txt");
+  assert.equal(result.removed, true);
+  assert.equal(apiClient.calls[1].options.method, "DELETE");
+  assert.equal(
+    apiClient.calls[1].options.headers["If-Match"],
+    "file-etag"
+  );
+  assert.match(apiClient.calls[1].url, /files\/file-1$/);
+});
+
+test("refuses to delete a Box file outside the configured folder", async () => {
+  const apiClient = createApiClient([
+    {
+      id: "file-2",
+      name: "outside.txt",
+      parent: {
+        id: "different-folder"
+      },
+      type: "file"
+    }
+  ]);
+  const provider = new BoxStorageProvider({
+    accountMaximumUploadSizeBytes: 1024,
+    apiClient,
+    folderId: "123"
+  });
+
+  await assert.rejects(
+    provider.deleteCloudFile({ id: "file-2" }),
+    /not directly inside the configured folder/
+  );
+  assert.equal(apiClient.calls.length, 1);
+});

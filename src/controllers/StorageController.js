@@ -4,11 +4,13 @@ const { pipeline } = require("node:stream/promises");
 
 class StorageController {
   constructor({
+    fileDeletionService,
     fileDownloadService,
     fileListingService,
     fileUploadService,
     providerFactory
   }) {
+    this.fileDeletionService = fileDeletionService;
     this.fileDownloadService = fileDownloadService;
     this.fileListingService = fileListingService;
     this.fileUploadService = fileUploadService;
@@ -29,6 +31,22 @@ class StorageController {
     try {
       response.json(
         await this.fileListingService.list(request.params.provider)
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteFile = async (request, response, next) => {
+    try {
+      response.json(
+        await this.fileDeletionService.delete(
+          request.params.provider,
+          {
+            id: request.params.fileId,
+            path: request.query.path
+          }
+        )
       );
     } catch (error) {
       next(error);

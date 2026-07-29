@@ -7,7 +7,8 @@ class StorageProvider {
     description,
     key,
     displayName,
-    maximumUploadSizeBytes
+    maximumUploadSizeBytes,
+    supportedFileActions = ["download"]
   }) {
     if (new.target === StorageProvider) {
       throw new TypeError("StorageProvider is an abstract class");
@@ -19,6 +20,7 @@ class StorageProvider {
     this.key = key;
     this.displayName = displayName;
     this.maximumUploadSizeBytes = maximumUploadSizeBytes;
+    this.supportedFileActions = supportedFileActions;
   }
 
   async getStatus() {
@@ -29,7 +31,8 @@ class StorageProvider {
       displayName: this.displayName,
       key: this.key,
       listingConfigured: this.isListingConfigured(),
-      maximumUploadSizeBytes: await this.getMaximumUploadSizeBytes()
+      maximumUploadSizeBytes: await this.getMaximumUploadSizeBytes(),
+      supportedFileActions: this.supportedFileActions
     };
   }
 
@@ -103,6 +106,16 @@ class StorageProvider {
   async downloadCloudFile() {
     throw new Error(
       `${this.displayName} does not implement downloadCloudFile()`
+    );
+  }
+
+  async deleteCloudFile() {
+    throw new ValidationError(
+      `${this.displayName} does not support file deletion`,
+      {
+        code: "UNSUPPORTED_FILE_ACTION",
+        statusCode: 405
+      }
     );
   }
 }

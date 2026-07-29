@@ -61,6 +61,7 @@ function createStorageRoutes({
     "/:provider/files/:fileId/download",
     controller.downloadFile
   );
+  router.delete("/:provider/files/:fileId", controller.deleteFile);
   router.post(
     "/:provider/files",
     uploadFile,

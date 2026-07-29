@@ -18,7 +18,8 @@ class BoxStorageProvider extends StorageProvider {
       displayName: "Box",
       key: "box",
       maximumUploadSizeBytes:
-        options.maximumUploadSizeBytes || 250 * 1024 * 1024
+        options.maximumUploadSizeBytes || 250 * 1024 * 1024,
+      supportedFileActions: ["download", "delete"]
     });
 
     this.directUploadMaximumSizeBytes =
@@ -179,7 +180,7 @@ class BoxStorageProvider extends StorageProvider {
     }
 
     const query = new URLSearchParams({
-      fields: "id,type,name,size,sha1,modified_at,parent"
+      fields: "id,type,name,size,sha1,etag,modified_at,parent"
     });
 
     return this.apiClient.requestJson(
@@ -533,6 +534,13 @@ class BoxStorageProvider extends StorageProvider {
       `${this.apiClient.apiUrl}/files/${encodeURIComponent(fileId)}`,
       {
         action: `Deleting Box file ${fileId}`,
+        ...(file.etag
+          ? {
+              headers: {
+                "If-Match": file.etag
+              }
+            }
+          : {}),
         method: "DELETE"
       }
     );
@@ -543,6 +551,10 @@ class BoxStorageProvider extends StorageProvider {
       provider: this.key,
       removed: true
     };
+  }
+
+  async deleteCloudFile(fileReference) {
+    return this.deleteFile(fileReference?.id);
   }
 
   async deleteFiles(fileIds) {

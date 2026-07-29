@@ -8,6 +8,7 @@ const {
   notFoundHandler
 } = require("./middleware/errorHandler");
 const { createStorageRoutes } = require("./routes/storageRoutes");
+const { FileDeletionService } = require("./services/FileDeletionService");
 const { FileDownloadService } = require("./services/FileDownloadService");
 const { FileListingService } = require("./services/FileListingService");
 const { FileUploadService } = require("./services/FileUploadService");
@@ -39,7 +40,11 @@ function createApp(options = {}) {
   const fileDownloadService =
     options.fileDownloadService ||
     new FileDownloadService(providerFactory);
+  const fileDeletionService =
+    options.fileDeletionService ||
+    new FileDeletionService(providerFactory);
   const controller = new StorageController({
+    fileDeletionService,
     fileDownloadService,
     fileListingService,
     fileUploadService,
