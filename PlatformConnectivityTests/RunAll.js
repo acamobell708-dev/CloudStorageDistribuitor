@@ -290,6 +290,7 @@ async function runAzureMenu(terminal) {
   throw new Error("Please enter 1, 2, or 3");
 }
 
+async function runBoxMenu(terminal) {
   console.log("");
   console.log("Box");
   console.log("1. Push one image");
