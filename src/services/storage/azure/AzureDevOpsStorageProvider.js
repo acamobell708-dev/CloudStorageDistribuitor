@@ -11,6 +11,9 @@ const { FileNamingService } = require("../FileNamingService");
 const { StorageProvider } = require("../StorageProvider");
 const { AzureDevOpsApiClient } = require("./AzureDevOpsApiClient");
 const {
+  createAzureDevOpsAuthorizationProvider
+} = require("./AzureDevOpsAuthorizationProvider");
+const {
   AzureGitHistoryPurgeService
 } = require("./AzureGitHistoryPurgeService");
 
@@ -163,11 +166,31 @@ const sourceMimeTypes = new Set([
 
 class AzureDevOpsStorageProvider extends StorageProvider {
   constructor(options = {}) {
+    const authorizationProvider =
+      options.authorizationProvider ||
+      createAzureDevOpsAuthorizationProvider({
+        clientId: options.managedIdentityClientId,
+        mode: options.authorizationMode,
+        pat: options.pat
+      });
+    const purgeAuthorizationProvider =
+      options.purgeAuthorizationProvider ||
+      createAzureDevOpsAuthorizationProvider({
+        clientId: options.purgeManagedIdentityClientId,
+        configurationName: "AZURE_PURGE_PAT",
+        mode:
+          options.purgeAuthorizationMode ||
+          options.authorizationMode,
+        pat: options.purgePat
+      });
     const deletionConfigured = Boolean(
-      options.remote && options.pat && options.shouldPush
+      options.remote &&
+        authorizationProvider.isConfigured() &&
+        options.shouldPush
     );
     const permanentDeletionConfigured = Boolean(
-      deletionConfigured && options.purgePat
+      deletionConfigured &&
+        purgeAuthorizationProvider.isConfigured()
     );
 
     super({
@@ -252,12 +275,13 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     this.apiClient =
       options.apiClient ||
       new AzureDevOpsApiClient({
+        authorizationProvider,
         branch: this.branch,
         fetch: options.fetch,
         ipv4Only: options.ipv4Only,
-        pat: options.pat,
         remote: options.remote
       });
+    this.authorizationProvider = authorizationProvider;
     this.localDataRepositoryEnabled =
       options.localDataRepositoryEnabled !== false;
     this.codeRepoRoot = options.codeRepoRoot;
@@ -272,7 +296,6 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     this.gitAuthorName =
       options.gitAuthorName || "Cloud Storage Media Service";
     this.ipv4Only = Boolean(options.ipv4Only);
-    this.pat = options.pat;
     this.permanentDeletionConfigured = permanentDeletionConfigured;
     this.remote = options.remote;
     this.shouldPush = Boolean(options.shouldPush);
@@ -281,9 +304,9 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       options.historyPurgeService ||
       (permanentDeletionConfigured
         ? new AzureGitHistoryPurgeService({
+            authorizationProvider: purgeAuthorizationProvider,
             branch: this.branch,
             ipv4Only: this.ipv4Only,
-            purgePat: options.purgePat,
             remote: this.remote
           })
         : undefined);
@@ -302,7 +325,11 @@ class AzureDevOpsStorageProvider extends StorageProvider {
   }
 
   isConfigured() {
-    return Boolean(this.remote && this.pat && this.shouldPush);
+    return Boolean(
+      this.remote &&
+        this.authorizationProvider.isConfigured() &&
+        this.shouldPush
+    );
   }
 
   isListingConfigured() {
@@ -512,7 +539,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       !this.historyPurgeService
     ) {
       throw new ConfigurationError(
-        "Azure permanent deletion requires a purge PAT"
+        "Azure permanent deletion requires purge authorization"
       );
     }
 
@@ -697,7 +724,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     };
   }
 
-  async runGit(argumentsList) {
+  async runGit(argumentsList, options = {}) {
     this.requireLocalDataRepository();
 
     const configurationArguments = ["-c", "credential.helper="];
@@ -712,15 +739,11 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     delete processEnvironment.VSCODE_GIT_ASKPASS_NODE;
     delete processEnvironment.VSCODE_GIT_ASKPASS_EXTRA_ARGS;
     delete processEnvironment.VSCODE_GIT_IPC_HANDLE;
+    delete processEnvironment.AZURE_GIT_AUTH_HEADER;
 
-    if (this.pat) {
-      const encodedPat = Buffer.from(`:${this.pat}`).toString("base64");
-      processEnvironment.AZURE_GIT_AUTH_HEADER =
-        `Authorization: Basic ${encodedPat}`;
-      configurationArguments.push(
-        "--config-env=http.extraheader=AZURE_GIT_AUTH_HEADER"
-      );
-    }
+    const authenticate =
+      Boolean(options.authenticate) &&
+      /^https:/i.test(this.remote || "");
 
     if (this.sslBackend) {
       configurationArguments.push(
@@ -730,6 +753,18 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     }
 
     try {
+      const authorizationHeader = authenticate
+        ? await this.authorizationProvider.getAuthorizationHeader()
+        : undefined;
+
+      if (authorizationHeader) {
+        processEnvironment.AZURE_GIT_AUTH_HEADER =
+          `Authorization: ${authorizationHeader}`;
+        configurationArguments.push(
+          "--config-env=http.extraheader=AZURE_GIT_AUTH_HEADER"
+        );
+      }
+
       const { stdout } = await this.execFileAsync(
         "git",
         [...configurationArguments, ...argumentsList],
@@ -771,7 +806,12 @@ class AzureDevOpsStorageProvider extends StorageProvider {
   }
 
   async fetchExistingAzureHistory() {
-    if (!this.shouldPush || !this.remote || !this.pat) {
+    if (
+      !this.shouldPush ||
+      !this.remote ||
+      (/^https:/i.test(this.remote) &&
+        !this.authorizationProvider.isConfigured())
+    ) {
       return;
     }
 
@@ -784,7 +824,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     fetchArguments.push("--depth=1", this.remote, this.branch);
 
     try {
-      await this.runGit(fetchArguments);
+      await this.runGit(fetchArguments, { authenticate: true });
       await this.runGit([
         "checkout",
         "-B",
@@ -955,8 +995,13 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       missing.push("AZURE_GIT_REMOTE");
     }
 
-    if (!this.pat) {
-      missing.push("AZURE_DEVOPS_PAT");
+    if (
+      /^https:/i.test(this.remote || "") &&
+      !this.authorizationProvider.isConfigured()
+    ) {
+      missing.push(
+        this.authorizationProvider.getMissingConfigurationName()
+      );
     }
 
     if (!this.shouldPush) {
@@ -980,7 +1025,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     }
 
     pushArguments.push(this.remote, `HEAD:${this.branch}`);
-    await this.runGit(pushArguments);
+    await this.runGit(pushArguments, { authenticate: true });
   }
 
   async pushStoredMedia(storedFiles) {

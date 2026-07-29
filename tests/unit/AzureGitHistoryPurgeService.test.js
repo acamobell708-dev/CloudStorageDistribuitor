@@ -53,3 +53,55 @@ test("refuses history rewrites when another branch or tag can retain data", () =
       error.statusCode === 409
   );
 });
+
+test("adds managed identity authorization only to remote Git operations", async () => {
+  const calls = [];
+  let tokenRequests = 0;
+  const service = new AzureGitHistoryPurgeService({
+    authorizationProvider: {
+      async getAuthorizationHeader() {
+        tokenRequests += 1;
+        return "Bearer short-lived-token";
+      },
+      getMissingConfigurationName() {
+        return "Azure managed identity";
+      },
+      isConfigured() {
+        return true;
+      }
+    },
+    execFileAsync: async (...argumentsList) => {
+      calls.push(argumentsList);
+      return { stdout: "" };
+    },
+    remote:
+      "https://organization@dev.azure.com/organization/project/_git/media"
+  });
+
+  await service.runGit("repository", ["status"]);
+  await service.runGit("repository", ["fetch", "origin"], {
+    authenticate: true
+  });
+
+  assert.equal(tokenRequests, 1);
+  assert.equal(
+    calls[0][1].includes(
+      "--config-env=http.extraheader=AZURE_PURGE_AUTH_HEADER"
+    ),
+    false
+  );
+  assert.equal(
+    calls[0][2].env.AZURE_PURGE_AUTH_HEADER,
+    undefined
+  );
+  assert.equal(
+    calls[1][1].includes(
+      "--config-env=http.extraheader=AZURE_PURGE_AUTH_HEADER"
+    ),
+    true
+  );
+  assert.equal(
+    calls[1][2].env.AZURE_PURGE_AUTH_HEADER,
+    "Authorization: Bearer short-lived-token"
+  );
+});

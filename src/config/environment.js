@@ -70,10 +70,20 @@ const environment = Object.freeze({
       path.join(os.tmpdir(), "cloud-storage-distributor")
   ),
   azure: Object.freeze({
+    authorizationMode: process.env.AZURE_AUTH_MODE || "pat",
     branch: process.env.AZURE_GIT_BRANCH || "main",
     ipv4Only: process.env.GIT_IPV4_ONLY === "true",
+    managedIdentityClientId:
+      process.env.AZURE_MANAGED_IDENTITY_CLIENT_ID,
     maximumUploadSizeBytes: 100 * 1024 * 1024,
     pat: process.env.AZURE_DEVOPS_PAT,
+    purgeAuthorizationMode:
+      process.env.AZURE_PURGE_AUTH_MODE ||
+      process.env.AZURE_AUTH_MODE ||
+      "pat",
+    purgeManagedIdentityClientId:
+      process.env.AZURE_PURGE_MANAGED_IDENTITY_CLIENT_ID ||
+      process.env.AZURE_MANAGED_IDENTITY_CLIENT_ID,
     purgePat:
       process.env.AZURE_PURGE_PAT || process.env.AZURE_DEVOPS_PAT,
     remote: process.env.AZURE_GIT_REMOTE,

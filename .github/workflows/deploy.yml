@@ -1,0 +1,206 @@
+name: Deploy to Azure Container Apps
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+concurrency:
+  group: azure-container-app-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish and deploy
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME }}
+      AZURE_GIT_REMOTE: ${{ vars.AZURE_GIT_REMOTE }}
+      AZURE_GIT_BRANCH: ${{ vars.AZURE_GIT_BRANCH }}
+      AZURE_PURGE_IDENTITY_RESOURCE_ID: ${{ vars.AZURE_PURGE_IDENTITY_RESOURCE_ID }}
+      AZURE_PURGE_IDENTITY_CLIENT_ID: ${{ vars.AZURE_PURGE_IDENTITY_CLIENT_ID }}
+      BOX_CLIENT_ID: ${{ secrets.BOX_CLIENT_ID }}
+      BOX_CLIENT_SECRET: ${{ secrets.BOX_CLIENT_SECRET }}
+      BOX_ENTERPRISE_ID: ${{ secrets.BOX_ENTERPRISE_ID }}
+      BOX_FOLDER_ID: ${{ secrets.BOX_FOLDER_ID }}
+      GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
+      GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+
+    steps:
+      - name: Check out the verified commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          persist-credentials: false
+
+      - name: Validate deployment settings
+        shell: bash
+        run: |
+          required_values=(
+            AZURE_CLIENT_ID
+            AZURE_TENANT_ID
+            AZURE_SUBSCRIPTION_ID
+            AZURE_RESOURCE_GROUP
+            AZURE_LOCATION
+            AZURE_CONTAINER_APP_NAME
+            AZURE_GIT_REMOTE
+          )
+
+          for variable_name in "${required_values[@]}"; do
+            if [[ -z "${!variable_name:-}" ]]; then
+              echo "::error::Missing GitHub production variable: ${variable_name}"
+              exit 1
+            fi
+          done
+
+          box_value_count=0
+          for variable_name in \
+            BOX_CLIENT_ID \
+            BOX_CLIENT_SECRET \
+            BOX_ENTERPRISE_ID \
+            BOX_FOLDER_ID; do
+            if [[ -n "${!variable_name:-}" ]]; then
+              box_value_count=$((box_value_count + 1))
+            fi
+          done
+
+          if [[ "${box_value_count}" -ne 0 && "${box_value_count}" -ne 4 ]]; then
+            echo "::error::Configure all four Box secrets or leave all four empty."
+            exit 1
+          fi
+
+          purge_value_count=0
+          for variable_name in \
+            AZURE_PURGE_IDENTITY_RESOURCE_ID \
+            AZURE_PURGE_IDENTITY_CLIENT_ID; do
+            if [[ -n "${!variable_name:-}" ]]; then
+              purge_value_count=$((purge_value_count + 1))
+            fi
+          done
+
+          if [[ "${purge_value_count}" -ne 0 && "${purge_value_count}" -ne 2 ]]; then
+            echo "::error::Configure both purge identity variables or leave both empty."
+            exit 1
+          fi
+
+          registry_value_count=0
+          for variable_name in GHCR_PULL_USERNAME GHCR_PULL_TOKEN; do
+            if [[ -n "${!variable_name:-}" ]]; then
+              registry_value_count=$((registry_value_count + 1))
+            fi
+          done
+
+          if [[ "${registry_value_count}" -ne 0 && "${registry_value_count}" -ne 2 ]]; then
+            echo "::error::Configure both GHCR pull secrets or leave both empty."
+            exit 1
+          fi
+
+      - name: Determine image names
+        id: image
+        shell: bash
+        run: |
+          repository_lower="${GITHUB_REPOSITORY,,}"
+          echo "sha-tag=ghcr.io/${repository_lower}:${DEPLOY_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "latest-tag=ghcr.io/${repository_lower}:latest" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish immutable container image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.image.outputs.sha-tag }}
+            ${{ steps.image.outputs.latest-tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Log in to Azure with GitHub OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy infrastructure and application revision
+        id: deployment
+        shell: bash
+        run: |
+          deployment_name="cloud-storage-${DEPLOY_SHA:0:12}"
+          application_url="$(
+            az deployment group create \
+              --name "${deployment_name}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --template-file infra/main.bicep \
+              --parameters \
+                location="${AZURE_LOCATION}" \
+                containerAppName="${AZURE_CONTAINER_APP_NAME}" \
+                imageName="${{ steps.image.outputs.sha-tag }}" \
+                azureGitRemote="${AZURE_GIT_REMOTE}" \
+                azureGitBranch="${AZURE_GIT_BRANCH:-main}" \
+                purgeManagedIdentityResourceId="${AZURE_PURGE_IDENTITY_RESOURCE_ID}" \
+                purgeManagedIdentityClientId="${AZURE_PURGE_IDENTITY_CLIENT_ID}" \
+                boxClientId="${BOX_CLIENT_ID}" \
+                boxClientSecret="${BOX_CLIENT_SECRET}" \
+                boxEnterpriseId="${BOX_ENTERPRISE_ID}" \
+                boxFolderId="${BOX_FOLDER_ID}" \
+                registryUsername="${GHCR_PULL_USERNAME}" \
+                registryPassword="${GHCR_PULL_TOKEN}" \
+              --query properties.outputs.containerAppUrl.value \
+              --output tsv \
+              --only-show-errors
+          )"
+
+          echo "application-url=${application_url}" >> "${GITHUB_OUTPUT}"
+          echo "::notice title=Container App URL::${application_url}"
+
+      - name: Verify the deployed health endpoint
+        shell: bash
+        run: |
+          health_url="${{ steps.deployment.outputs.application-url }}/api/health"
+
+          for attempt in {1..12}; do
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              --max-time 30 \
+              "${health_url}"; then
+              exit 0
+            fi
+
+            echo "Health check attempt ${attempt} failed; retrying in 10 seconds."
+            sleep 10
+          done
+
+          echo "::error::The deployed Container App did not become healthy."
+          exit 1

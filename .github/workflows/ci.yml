@@ -43,6 +43,12 @@ jobs:
       - name: Build React application
         run: npm run build
 
+      - name: Build production container
+        run: docker build --tag cloud-storage-distributor:ci .
+
+      - name: Validate Azure deployment template
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
       - name: Upload deployable web build
         uses: actions/upload-artifact@v7
         with:

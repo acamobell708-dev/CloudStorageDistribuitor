@@ -3,6 +3,9 @@ const {
   ExternalServiceError
 } = require("../../../errors/ApplicationError");
 const dns = require("node:dns");
+const {
+  createAzureDevOpsAuthorizationProvider
+} = require("./AzureDevOpsAuthorizationProvider");
 
 function parseAzureRemoteUrl(remote) {
   let url;
@@ -84,9 +87,15 @@ function parseAzureRemoteUrl(remote) {
 class AzureDevOpsApiClient {
   constructor(options = {}) {
     this.branch = options.branch || "main";
+    this.authorizationProvider =
+      options.authorizationProvider ||
+      createAzureDevOpsAuthorizationProvider({
+        clientId: options.managedIdentityClientId,
+        mode: options.authorizationMode,
+        pat: options.pat
+      });
     this.fetch = options.fetch || globalThis.fetch;
     this.ipv4Only = Boolean(options.ipv4Only);
-    this.pat = options.pat;
     this.remote = options.remote;
     this.repositoryDetails = undefined;
 
@@ -96,7 +105,9 @@ class AzureDevOpsApiClient {
   }
 
   isConfigured() {
-    return Boolean(this.remote && this.pat);
+    return Boolean(
+      this.remote && this.authorizationProvider.isConfigured()
+    );
   }
 
   requireConfiguration() {
@@ -106,8 +117,10 @@ class AzureDevOpsApiClient {
       missing.push("AZURE_GIT_REMOTE");
     }
 
-    if (!this.pat) {
-      missing.push("AZURE_DEVOPS_PAT");
+    if (!this.authorizationProvider.isConfigured()) {
+      missing.push(
+        this.authorizationProvider.getMissingConfigurationName()
+      );
     }
 
     if (missing.length > 0) {
@@ -130,16 +143,18 @@ class AzureDevOpsApiClient {
   async request(url, options = {}) {
     this.requireConfiguration();
     const { action, ...fetchOptions } = options;
-    const encodedPat = Buffer.from(`:${this.pat}`).toString("base64");
     let response;
 
     try {
+      const authorizationHeader =
+        await this.authorizationProvider.getAuthorizationHeader();
+
       response = await this.fetch(url, {
         ...fetchOptions,
         headers: {
           Accept: "application/json",
           ...(fetchOptions.headers || {}),
-          Authorization: `Basic ${encodedPat}`
+          Authorization: authorizationHeader
         }
       });
     } catch (error) {

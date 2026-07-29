@@ -17,6 +17,29 @@ function startServer(options = {}) {
   });
 }
 
+function stopServer(server, options = {}) {
+  const timeoutMs = options.timeoutMs || 10_000;
+
+  return new Promise((resolve, reject) => {
+    const forceCloseTimer = setTimeout(() => {
+      server.closeAllConnections?.();
+    }, timeoutMs);
+
+    forceCloseTimer.unref();
+    server.close((error) => {
+      clearTimeout(forceCloseTimer);
+
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+    server.closeIdleConnections?.();
+  });
+}
+
 if (require.main === module) {
   startServer()
     .then((server) => {
@@ -25,6 +48,22 @@ if (require.main === module) {
         `Cloud Storage Distributor listening at ` +
           `http://${address.address}:${address.port}`
       );
+
+      let shutdownPromise;
+
+      for (const signal of ["SIGINT", "SIGTERM"]) {
+        process.once(signal, () => {
+          if (!shutdownPromise) {
+            console.log(
+              `${signal} received; finishing active requests before shutdown`
+            );
+            shutdownPromise = stopServer(server).catch((error) => {
+              console.error(error);
+              process.exitCode = 1;
+            });
+          }
+        });
+      }
     })
     .catch((error) => {
       console.error(error);
@@ -32,4 +71,7 @@ if (require.main === module) {
     });
 }
 
-module.exports = { startServer };
+module.exports = {
+  startServer,
+  stopServer
+};

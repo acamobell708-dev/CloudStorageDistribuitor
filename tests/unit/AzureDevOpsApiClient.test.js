@@ -71,6 +71,36 @@ test("lists the latest remote branch through the Azure DevOps REST API", async (
   assert.equal(calls[0].url.includes("secret-pat"), false);
 });
 
+test("uses an injected bearer authorization provider", async () => {
+  const calls = [];
+  const client = new AzureDevOpsApiClient({
+    authorizationProvider: {
+      async getAuthorizationHeader() {
+        return "Bearer short-lived-token";
+      },
+      getMissingConfigurationName() {
+        return "Azure managed identity";
+      },
+      isConfigured() {
+        return true;
+      }
+    },
+    fetch: async (url, options) => {
+      calls.push({ options, url });
+      return Response.json({ value: [] });
+    },
+    remote:
+      "https://organization@dev.azure.com/organization/project/_git/media"
+  });
+
+  await client.listRepositoryItems();
+
+  assert.equal(
+    calls[0].options.headers.Authorization,
+    "Bearer short-lived-token"
+  );
+});
+
 test("opens a current-branch Azure item as a download stream", async () => {
   const calls = [];
   const client = new AzureDevOpsApiClient({

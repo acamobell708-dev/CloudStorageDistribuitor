@@ -422,3 +422,51 @@ test("blocks local repository methods when configured as a web provider", async 
     /local Azure data repository is disabled for web providers/
   );
 });
+
+test("adds authorization only to outbound HTTPS Git operations", async () => {
+  const calls = [];
+  let tokenRequests = 0;
+  const authorizationProvider = {
+    async getAuthorizationHeader() {
+      tokenRequests += 1;
+      return "Bearer short-lived-token";
+    },
+    getMissingConfigurationName() {
+      return "Azure managed identity";
+    },
+    isConfigured() {
+      return true;
+    }
+  };
+  const provider = createProvider({
+    authorizationProvider,
+    execFileAsync: async (...argumentsList) => {
+      calls.push(argumentsList);
+      return { stdout: "" };
+    }
+  });
+
+  await provider.runGit(["status"]);
+  await provider.runGit(["fetch", "origin"], {
+    authenticate: true
+  });
+
+  assert.equal(tokenRequests, 1);
+  assert.equal(
+    calls[0][1].includes(
+      "--config-env=http.extraheader=AZURE_GIT_AUTH_HEADER"
+    ),
+    false
+  );
+  assert.equal(calls[0][2].env.AZURE_GIT_AUTH_HEADER, undefined);
+  assert.equal(
+    calls[1][1].includes(
+      "--config-env=http.extraheader=AZURE_GIT_AUTH_HEADER"
+    ),
+    true
+  );
+  assert.equal(
+    calls[1][2].env.AZURE_GIT_AUTH_HEADER,
+    "Authorization: Bearer short-lived-token"
+  );
+});

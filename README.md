@@ -103,20 +103,33 @@ by the enterprise, and have read/write access to `BOX_FOLDER_ID`.
 AZURE_GIT_REMOTE=https://your-organization@dev.azure.com/your-organization/your-project/_git/your-repository
 AZURE_GIT_BRANCH=main
 AZURE_GIT_PUSH=true
+AZURE_AUTH_MODE=pat
 AZURE_DEVOPS_PAT=
+AZURE_MANAGED_IDENTITY_CLIENT_ID=
+AZURE_PURGE_AUTH_MODE=pat
 AZURE_PURGE_PAT=
+AZURE_PURGE_MANAGED_IDENTITY_CLIENT_ID=
 ```
 
-The PAT needs code read/write access. `AZURE_GIT_PUSH=true` enables browser
-writes. Web uploads go straight to the configured remote and do not use a local
-Git working tree, which keeps uploaded data out of the GitHub code repository.
+`AZURE_GIT_PUSH=true` enables browser writes. Web uploads go straight to the
+configured remote and do not use a local Git working tree, which keeps uploaded
+data out of the GitHub code repository.
 
+For local development, keep both authorization modes as `pat`.
 `AZURE_PURGE_PAT` is optional and otherwise defaults to `AZURE_DEVOPS_PAT`.
-Its Azure identity needs repository read/write and **Force push (rewrite
-history)** permission. A separate service identity provides the strongest
-separation; two PATs owned by the same Azure identity still share that
-identity's repository permissions. The server permits purge requests only for
-the predefined owner account. Deploy behind HTTPS.
+The normal identity needs repository read and contribute permissions; the purge
+identity additionally needs **Force push (rewrite history)**.
+
+For Azure Container Apps, set `AZURE_AUTH_MODE=managed-identity` and
+`AZURE_PURGE_AUTH_MODE=managed-identity`. Enable a system-assigned identity and
+leave both client-ID values empty, or enter the client ID of a user-assigned
+identity. Add that identity to the Azure DevOps organization and grant its
+repository permissions. The server then requests short-lived Azure DevOps
+tokens at operation time, so no PAT needs to be stored or renewed. A separate
+user-assigned purge identity provides stronger permission separation.
+
+The server permits purge requests only for the predefined owner account.
+Deploy behind HTTPS.
 
 `AZURE_DATA_REPO_DIR=../AzureDataRepo` is optional and used only by the CLI
 connectivity tests. The web provider is created with local-repository access
@@ -158,6 +171,15 @@ npm run build
 npm start
 ```
 
+## Azure deployment
+
+The repository includes a production Docker image, Bicep infrastructure, and a
+GitHub OIDC deployment workflow for Azure Container Apps. The deployment uses
+managed identity for Azure DevOps, HTTPS ingress, health probes, scale-to-zero,
+and a single-replica ceiling for the current in-memory session model.
+
+Follow the detailed [Azure Container Apps deployment guide](docs/AZURE_CONTAINER_APPS.md).
+
 ## Checks
 
 ```shell
@@ -168,10 +190,10 @@ npm run build
 ```
 
 `npm test` runs both test suites. `.github/workflows/ci.yml` performs these
-checks on every push and pull request and retains the built `dist` artifact for
-seven days. Cloud operations are mocked; the separate CLI storage integration
-test uses a disposable local repository, so CI does not require provider
-secrets.
+checks, builds the production container, validates the Bicep template, and
+retains the built `dist` artifact for seven days. Cloud operations are mocked;
+the separate CLI storage integration test uses a disposable local repository,
+so CI does not require provider secrets.
 
 ## API
 

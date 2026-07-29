@@ -8,6 +8,9 @@ const {
   ExternalServiceError,
   ValidationError
 } = require("../../../errors/ApplicationError");
+const {
+  createAzureDevOpsAuthorizationProvider
+} = require("./AzureDevOpsAuthorizationProvider");
 
 const defaultExecFileAsync = promisify(execFile);
 const managedPathPrefixes = [
@@ -20,9 +23,18 @@ const managedPathPrefixes = [
 class AzureGitHistoryPurgeService {
   constructor(options = {}) {
     this.branch = options.branch || "main";
+    this.authorizationProvider =
+      options.authorizationProvider ||
+      createAzureDevOpsAuthorizationProvider({
+        clientId: options.purgeManagedIdentityClientId,
+        configurationName: "AZURE_PURGE_PAT",
+        mode:
+          options.purgeAuthorizationMode ||
+          options.authorizationMode,
+        pat: options.purgePat
+      });
     this.execFileAsync = options.execFileAsync || defaultExecFileAsync;
     this.ipv4Only = Boolean(options.ipv4Only);
-    this.purgePat = options.purgePat;
     this.remote = options.remote;
     this.temporaryRoot = options.temporaryRoot || os.tmpdir();
   }
@@ -36,9 +48,11 @@ class AzureGitHistoryPurgeService {
 
     if (
       /^https:/i.test(this.remote || "") &&
-      !this.purgePat
+      !this.authorizationProvider.isConfigured()
     ) {
-      missing.push("AZURE_PURGE_PAT");
+      missing.push(
+        this.authorizationProvider.getMissingConfigurationName()
+      );
     }
 
     if (missing.length > 0) {
@@ -81,7 +95,10 @@ class AzureGitHistoryPurgeService {
     return normalizedPath;
   }
 
-  createProcessEnvironment(additions = {}) {
+  createProcessEnvironment(
+    additions = {},
+    authorizationHeader
+  ) {
     const processEnvironment = {
       ...process.env,
       ...additions,
@@ -94,13 +111,11 @@ class AzureGitHistoryPurgeService {
     delete processEnvironment.VSCODE_GIT_ASKPASS_NODE;
     delete processEnvironment.VSCODE_GIT_ASKPASS_EXTRA_ARGS;
     delete processEnvironment.VSCODE_GIT_IPC_HANDLE;
+    delete processEnvironment.AZURE_PURGE_AUTH_HEADER;
 
-    if (this.purgePat) {
-      const encodedPat = Buffer.from(`:${this.purgePat}`).toString(
-        "base64"
-      );
+    if (authorizationHeader) {
       processEnvironment.AZURE_PURGE_AUTH_HEADER =
-        `Authorization: Basic ${encodedPat}`;
+        `Authorization: ${authorizationHeader}`;
     }
 
     return processEnvironment;
@@ -108,20 +123,30 @@ class AzureGitHistoryPurgeService {
 
   async runGit(cwd, argumentsList, options = {}) {
     const configurationArguments = ["-c", "credential.helper="];
-
-    if (this.purgePat) {
-      configurationArguments.push(
-        "--config-env=http.extraheader=AZURE_PURGE_AUTH_HEADER"
-      );
-    }
+    const authenticate =
+      Boolean(options.authenticate) &&
+      /^https:/i.test(this.remote || "");
 
     try {
+      const authorizationHeader = authenticate
+        ? await this.authorizationProvider.getAuthorizationHeader()
+        : undefined;
+
+      if (authorizationHeader) {
+        configurationArguments.push(
+          "--config-env=http.extraheader=AZURE_PURGE_AUTH_HEADER"
+        );
+      }
+
       const { stdout } = await this.execFileAsync(
         "git",
         [...configurationArguments, ...argumentsList],
         {
           cwd,
-          env: this.createProcessEnvironment(options.environment),
+          env: this.createProcessEnvironment(
+            options.environment,
+            authorizationHeader
+          ),
           maxBuffer: 20 * 1024 * 1024,
           windowsHide: true
         }
@@ -151,7 +176,10 @@ class AzureGitHistoryPurgeService {
     }
 
     argumentsList.push("--mirror", this.remote, destination);
-    await this.runGit(this.temporaryRoot, argumentsList, { action });
+    await this.runGit(this.temporaryRoot, argumentsList, {
+      action,
+      authenticate: true
+    });
   }
 
   async listReferences(repositoryDirectory) {
@@ -300,7 +328,8 @@ class AzureGitHistoryPurgeService {
     await this.runGit(repositoryDirectory, argumentsList, {
       action:
         "Azure rejected the history rewrite. The repository may have " +
-        "changed while permanent deletion was running."
+        "changed while permanent deletion was running.",
+      authenticate: true
     });
   }
 

@@ -33,3 +33,27 @@ test("creates the web Azure provider without local repository access", () => {
     "delete"
   ]);
 });
+
+test("enables Azure actions when managed identity is selected", () => {
+  const factory = createStorageProviderFactory({
+    azure: {
+      authorizationMode: "managed-identity",
+      branch: "main",
+      maximumUploadSizeBytes: 100 * 1024 * 1024,
+      purgeAuthorizationMode: "managed-identity",
+      remote:
+        "https://organization@dev.azure.com/organization/project/_git/media",
+      shouldPush: true
+    },
+    box: {}
+  });
+  const provider = factory.get("azure");
+
+  assert.equal(provider.isConfigured(), true);
+  assert.equal(provider.isListingConfigured(), true);
+  assert.deepEqual(provider.supportedFileActions, [
+    "download",
+    "delete",
+    "permanent-delete"
+  ]);
+});
