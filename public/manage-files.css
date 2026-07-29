@@ -289,11 +289,6 @@
   text-overflow: ellipsis;
 }
 
-.listed-file-name a:hover {
-  color: #2163ee;
-  text-decoration: underline;
-}
-
 .file-table code {
   color: #657289;
   font-family: "Cascadia Code", Consolas, monospace;

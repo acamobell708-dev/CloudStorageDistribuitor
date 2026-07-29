@@ -71,6 +71,5 @@ function createStorageRoutes({
 }
 
 module.exports = {
-  createProviderUploadMiddleware,
   createStorageRoutes
 };

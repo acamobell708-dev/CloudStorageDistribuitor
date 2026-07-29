@@ -334,10 +334,6 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     };
   }
 
-  getMediaLocation(filename, contentType) {
-    return this.getStorageLocation(filename, contentType);
-  }
-
   async listCloudFiles() {
     const items = await this.apiClient.listRepositoryItems();
 
@@ -1138,7 +1134,5 @@ class AzureDevOpsStorageProvider extends StorageProvider {
 }
 
 module.exports = {
-  AzureDevOpsStorageProvider,
-  mediaDirectories,
-  mediaExtensions
+  AzureDevOpsStorageProvider
 };

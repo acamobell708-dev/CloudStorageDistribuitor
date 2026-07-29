@@ -58,11 +58,6 @@ class BoxStorageProvider extends StorageProvider {
     this.apiClient.authClient.requireConfiguration();
   }
 
-  async getAccessToken() {
-    this.requireConfiguration();
-    return this.apiClient.authClient.getAccessToken();
-  }
-
   async getMaximumUploadSizeBytes() {
     if (!this.isConfigured()) {
       return this.maximumUploadSizeBytes;

@@ -88,8 +88,4 @@ const environment = Object.freeze({
   })
 });
 
-module.exports = {
-  environment,
-  loadEnvironmentFile,
-  parseNumber
-};
+module.exports = { environment };

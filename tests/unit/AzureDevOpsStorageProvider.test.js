@@ -32,17 +32,17 @@ test("accepts common document, image, audio, and video locations", () => {
     "documents"
   );
   assert.equal(
-    provider.getMediaLocation("photo.webp", "image/webp")
+    provider.getStorageLocation("photo.webp", "image/webp")
       .relativeDirectory,
     "images"
   );
   assert.equal(
-    provider.getMediaLocation("song.flac", "audio/flac")
+    provider.getStorageLocation("song.flac", "audio/flac")
       .relativeDirectory,
     "media/audio"
   );
   assert.equal(
-    provider.getMediaLocation("clip.mp4", "video/mp4")
+    provider.getStorageLocation("clip.mp4", "video/mp4")
       .relativeDirectory,
     "media/video"
   );

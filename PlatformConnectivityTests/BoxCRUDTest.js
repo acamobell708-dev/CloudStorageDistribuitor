@@ -3,9 +3,9 @@ const {
   BoxStorageProvider
 } = require("../src/services/storage/box/BoxStorageProvider");
 
-// The CLI connectivity harness now exercises the same Box implementation as
-// the web API. Keeping this adapter preserves the original function exports
-// while credentials, validation, pagination, and network work remain in src.
+// The CLI connectivity harness exercises the same Box implementation as the
+// web API while credentials, validation, pagination, and network work remain
+// in src.
 const provider = new BoxStorageProvider({
   ...environment.box
 });
@@ -20,10 +20,6 @@ const downloadFile = (...argumentsList) =>
   provider.downloadFile(...argumentsList);
 const downloadFiles = (...argumentsList) =>
   provider.downloadFiles(...argumentsList);
-const getAccessToken = (...argumentsList) =>
-  provider.getAccessToken(...argumentsList);
-const getFileInfo = (...argumentsList) =>
-  provider.getFileInfo(...argumentsList);
 const listFiles = (...argumentsList) =>
   provider.listFiles(...argumentsList);
 const uploadFile = (...argumentsList) =>
@@ -37,8 +33,6 @@ module.exports = {
   downloadAllFiles,
   downloadFile,
   downloadFiles,
-  getAccessToken,
-  getFileInfo,
   listFiles,
   uploadFile,
   uploadFiles,

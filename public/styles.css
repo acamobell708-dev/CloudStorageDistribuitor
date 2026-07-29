@@ -223,18 +223,6 @@ a {
   background: #eaf1ff;
 }
 
-.rail-count {
-  display: grid;
-  place-items: center;
-  width: 19px;
-  height: 19px;
-  margin-left: auto;
-  border-radius: 6px;
-  color: #4e6da9;
-  background: #edf1f7;
-  font-size: 9px;
-}
-
 .rail-footer {
   display: flex;
   align-items: center;
@@ -942,18 +930,6 @@ main {
   border-radius: 50%;
   color: #2467ed;
   background: white;
-}
-
-.soon-tag {
-  margin-left: auto;
-  padding: 4px 6px;
-  border-radius: 5px;
-  color: #7e8795 !important;
-  background: #eef0f4;
-  font-size: 7px !important;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
 }
 
 .security-note {
