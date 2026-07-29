@@ -160,7 +160,7 @@ var applicationEnvironmentVariables = concat([
   }
 ], purgeIdentityEnvironmentVariables, boxEnvironmentVariables)
 
-resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
+resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2025-07-01' = {
   name: containerAppsEnvironmentName
   location: location
   properties: {
@@ -170,7 +170,7 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-03-01'
   }
 }
 
-resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
+resource containerApp 'Microsoft.App/containerApps@2025-07-01' = {
   name: containerAppName
   location: location
   identity: separatePurgeIdentityConfigured ? {

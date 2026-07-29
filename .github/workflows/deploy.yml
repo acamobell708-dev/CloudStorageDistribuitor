@@ -159,29 +159,40 @@ jobs:
         shell: bash
         run: |
           deployment_name="cloud-storage-${DEPLOY_SHA:0:12}"
-          application_url="$(
-            az deployment group create \
+
+          if ! application_url="$(
+              az deployment group create \
+                --name "${deployment_name}" \
+                --resource-group "${AZURE_RESOURCE_GROUP}" \
+                --template-file infra/main.bicep \
+                --parameters \
+                  location="${AZURE_LOCATION}" \
+                  containerAppName="${AZURE_CONTAINER_APP_NAME}" \
+                  imageName="${{ steps.image.outputs.sha-tag }}" \
+                  azureGitRemote="${AZURE_GIT_REMOTE}" \
+                  azureGitBranch="${AZURE_GIT_BRANCH:-main}" \
+                  purgeManagedIdentityResourceId="${AZURE_PURGE_IDENTITY_RESOURCE_ID}" \
+                  purgeManagedIdentityClientId="${AZURE_PURGE_IDENTITY_CLIENT_ID}" \
+                  boxClientId="${BOX_CLIENT_ID}" \
+                  boxClientSecret="${BOX_CLIENT_SECRET}" \
+                  boxEnterpriseId="${BOX_ENTERPRISE_ID}" \
+                  boxFolderId="${BOX_FOLDER_ID}" \
+                  registryUsername="${GHCR_PULL_USERNAME}" \
+                  registryPassword="${GHCR_PULL_TOKEN}" \
+                --query properties.outputs.containerAppUrl.value \
+                --output tsv \
+                --only-show-errors
+            )"; then
+            echo "::group::Failed Azure deployment operations"
+            az deployment operation group list \
               --name "${deployment_name}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
-              --template-file infra/main.bicep \
-              --parameters \
-                location="${AZURE_LOCATION}" \
-                containerAppName="${AZURE_CONTAINER_APP_NAME}" \
-                imageName="${{ steps.image.outputs.sha-tag }}" \
-                azureGitRemote="${AZURE_GIT_REMOTE}" \
-                azureGitBranch="${AZURE_GIT_BRANCH:-main}" \
-                purgeManagedIdentityResourceId="${AZURE_PURGE_IDENTITY_RESOURCE_ID}" \
-                purgeManagedIdentityClientId="${AZURE_PURGE_IDENTITY_CLIENT_ID}" \
-                boxClientId="${BOX_CLIENT_ID}" \
-                boxClientSecret="${BOX_CLIENT_SECRET}" \
-                boxEnterpriseId="${BOX_ENTERPRISE_ID}" \
-                boxFolderId="${BOX_FOLDER_ID}" \
-                registryUsername="${GHCR_PULL_USERNAME}" \
-                registryPassword="${GHCR_PULL_TOKEN}" \
-              --query properties.outputs.containerAppUrl.value \
-              --output tsv \
-              --only-show-errors
-          )"
+              --query "[?properties.provisioningState=='Failed'].{resource:properties.targetResource.id,operation:properties.provisioningOperation,statusCode:properties.statusCode,error:properties.statusMessage.error}" \
+              --output jsonc \
+              --only-show-errors || true
+            echo "::endgroup::"
+            exit 1
+          fi
 
           echo "application-url=${application_url}" >> "${GITHUB_OUTPUT}"
           echo "::notice title=Container App URL::${application_url}"
