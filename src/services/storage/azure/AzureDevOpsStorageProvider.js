@@ -9,6 +9,7 @@ const {
 } = require("../../../errors/ApplicationError");
 const { FileNamingService } = require("../FileNamingService");
 const { StorageProvider } = require("../StorageProvider");
+const { UploadPathService } = require("../UploadPathService");
 const { AzureDevOpsApiClient } = require("./AzureDevOpsApiClient");
 const {
   createAzureDevOpsAuthorizationProvider
@@ -256,7 +257,6 @@ class AzureDevOpsStorageProvider extends StorageProvider {
         ".yaml",
         ".yml"
       ],
-      browserUploadStorage: "memory",
       description: "Versioned documents, source code, images, audio and video",
       displayName: "Azure Repos",
       key: "azure",
@@ -291,6 +291,8 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     this.execFileAsync = options.execFileAsync || defaultExecFileAsync;
     this.fileNamingService =
       options.fileNamingService || new FileNamingService();
+    this.uploadPathService =
+      options.uploadPathService || new UploadPathService();
     this.gitAuthorEmail =
       options.gitAuthorEmail || "media-service@localhost";
     this.gitAuthorName =
@@ -389,6 +391,31 @@ class AzureDevOpsStorageProvider extends StorageProvider {
     };
   }
 
+  normalizeCloudFile(item) {
+    const numericSize =
+      item.size === undefined || item.size === null
+        ? Number.NaN
+        : Number(item.size);
+    const modifiedAt =
+      item.latestProcessedChange?.committer?.date ||
+      item.latestProcessedChange?.author?.date;
+    const storedName = path.posix.basename(item.path);
+
+    return {
+      contentType: item.contentMetadata?.contentType,
+      id: item.objectId,
+      modifiedAt,
+      name: this.fileNamingService.getDisplayName(storedName),
+      path: item.path,
+      provider: this.key,
+      ...(Number.isFinite(numericSize) ? { size: numericSize } : {}),
+      storedName,
+      type: "file",
+      version: item.commitId,
+      webUrl: this.apiClient.createFileWebUrl(item.path)
+    };
+  }
+
   async listCloudFiles() {
     const items = await this.apiClient.listRepositoryItems({
       includeSizes: true
@@ -400,30 +427,153 @@ class AzureDevOpsStorageProvider extends StorageProvider {
           !item.isFolder &&
           String(item.gitObjectType || "").toLowerCase() === "blob"
       )
-      .map((item) => {
-        const numericSize =
-          item.size === undefined || item.size === null
-            ? Number.NaN
-            : Number(item.size);
-        const modifiedAt =
-          item.latestProcessedChange?.committer?.date ||
-          item.latestProcessedChange?.author?.date;
-        const storedName = path.posix.basename(item.path);
-
-        return {
-          contentType: item.contentMetadata?.contentType,
-          id: item.objectId,
-          modifiedAt,
-          name: this.fileNamingService.getDisplayName(storedName),
-          path: item.path,
-          provider: this.key,
-          ...(Number.isFinite(numericSize) ? { size: numericSize } : {}),
-          storedName,
-          version: item.commitId,
-          webUrl: this.apiClient.createFileWebUrl(item.path)
-        };
-      })
+      .map((item) => this.normalizeCloudFile(item))
       .sort((first, second) => first.path.localeCompare(second.path));
+  }
+
+  normalizeFolderPath(folderPath) {
+    const suppliedPath = String(folderPath || "/").trim();
+
+    if (
+      !suppliedPath.startsWith("/") ||
+      suppliedPath.includes("\\") ||
+      /[\0\r\n]/.test(suppliedPath)
+    ) {
+      throw new ValidationError(
+        "The Azure repository folder path is not safe"
+      );
+    }
+
+    const normalizedPath = path.posix.normalize(suppliedPath);
+
+    if (
+      normalizedPath !== suppliedPath.replace(/\/+$/, "") &&
+      suppliedPath !== "/"
+    ) {
+      throw new ValidationError(
+        "The Azure repository folder path is not safe"
+      );
+    }
+
+    return normalizedPath;
+  }
+
+  async browseCloudFiles(folderReference = {}) {
+    const folderPath = this.normalizeFolderPath(folderReference.path);
+    const items = await this.apiClient.listRepositoryItems({
+      includeSizes: true
+    });
+    const folderExists =
+      folderPath === "/" ||
+      items.some(
+        (item) =>
+          item.isFolder && item.path === folderPath
+      ) ||
+      items.some((item) =>
+        item.path.startsWith(`${folderPath}/`)
+      );
+
+    if (!folderExists) {
+      throw new ValidationError(
+        "The Azure folder is no longer present on the configured branch",
+        {
+          code: "FOLDER_NOT_FOUND",
+          statusCode: 404
+        }
+      );
+    }
+
+    const prefix = folderPath === "/" ? "/" : `${folderPath}/`;
+    const children = new Map();
+
+    for (const item of items) {
+      if (folderPath === "/" && item.path === "/folders") {
+        continue;
+      }
+
+      if (!item.path.startsWith(prefix) || item.path === folderPath) {
+        continue;
+      }
+
+      const isManagedFolderItem =
+        folderPath === "/" && item.path.startsWith("/folders/");
+      const relativePath = isManagedFolderItem
+        ? item.path.slice("/folders/".length)
+        : item.path.slice(prefix.length);
+      const [childName, ...remainingSegments] =
+        relativePath.split("/");
+      const childPath =
+        isManagedFolderItem
+          ? `/folders/${childName}`
+          : folderPath === "/"
+          ? `/${childName}`
+          : `${folderPath}/${childName}`;
+
+      if (remainingSegments.length > 0 || item.isFolder) {
+        const folderItem =
+          items.find(
+            (candidate) =>
+              candidate.isFolder && candidate.path === childPath
+          ) || item;
+
+        children.set(`folder:${childPath}`, {
+          id: folderItem.objectId || childPath,
+          modifiedAt:
+            folderItem.latestProcessedChange?.committer?.date ||
+            folderItem.latestProcessedChange?.author?.date,
+          name: childName,
+          path: childPath,
+          provider: this.key,
+          type: "folder",
+          webUrl: this.apiClient.createFileWebUrl(childPath)
+        });
+      } else if (
+        String(item.gitObjectType || "").toLowerCase() === "blob"
+      ) {
+        children.set(`file:${item.objectId}:${item.path}`, {
+          ...this.normalizeCloudFile(item)
+        });
+      }
+    }
+
+    const segments = folderPath.split("/").filter(Boolean);
+    const visibleSegments =
+      segments[0] === "folders" ? segments.slice(1) : segments;
+    const breadcrumbs = [
+      {
+        id: "/",
+        name: this.displayName,
+        path: "/"
+      }
+    ];
+    let breadcrumbPath =
+      segments[0] === "folders" ? "/folders" : "";
+
+    for (const segment of visibleSegments) {
+      breadcrumbPath += `/${segment}`;
+      breadcrumbs.push({
+        id: breadcrumbPath,
+        name: segment,
+        path: breadcrumbPath
+      });
+    }
+
+    return {
+      breadcrumbs,
+      files: [...children.values()].sort(
+        (first, second) =>
+          first.type === second.type
+            ? first.name.localeCompare(second.name)
+            : first.type === "folder"
+              ? -1
+              : 1
+      ),
+      folder: {
+        id: folderPath,
+        name: visibleSegments.at(-1) || this.displayName,
+        path: folderPath
+      }
+    };
   }
 
   async downloadCloudFile(fileReference) {
@@ -624,13 +774,18 @@ class AzureDevOpsStorageProvider extends StorageProvider {
         file.filename,
         file.contentType
       );
+      const uploadedDirectory =
+        this.uploadPathService.getDirectory(file.relativePath);
+      const relativeDirectory = uploadedDirectory
+        ? `folders/${uploadedDirectory}`
+        : location.relativeDirectory;
       const { filename: requestedFilename, hash } =
         await this.fileNamingService.createStoredNameForFile(file);
       const gitBlobHash =
         await this.fileNamingService.createGitBlobHash(file);
       const directoryInventory = inventory.filter(
         (item) =>
-          item.relativeDirectory === location.relativeDirectory
+          item.relativeDirectory === relativeDirectory
       );
       const existing = directoryInventory.find(
         (item) =>
@@ -663,7 +818,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
         path.extname(filename)
       )}${location.extension}`;
       const repositoryPath =
-        `/${location.relativeDirectory}/${safeFilename}`;
+        `/${relativeDirectory}/${safeFilename}`;
       const body = Buffer.isBuffer(file.body)
         ? file.body
         : await fs.readFile(file.path);
@@ -676,7 +831,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
         filename: safeFilename,
         objectId: gitBlobHash,
         path: repositoryPath,
-        relativeDirectory: location.relativeDirectory
+        relativeDirectory
       });
       preparedFiles.push({
         duplicate: false,
@@ -876,7 +1031,10 @@ class AzureDevOpsStorageProvider extends StorageProvider {
           await this.fetchExistingAzureHistory();
         }
 
-        for (const directory of Object.values(mediaDirectories)) {
+        for (const directory of [
+          ...Object.values(mediaDirectories),
+          "folders"
+        ]) {
           await fs.mkdir(path.join(this.dataRepoRoot, directory), {
             recursive: true
           });
@@ -1251,6 +1409,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       "HEAD",
       "--",
       "documents/",
+      "folders/",
       "images/",
       "media/",
       "source/"
@@ -1260,6 +1419,7 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       .filter(
         (item) =>
           item.startsWith("documents/") ||
+          item.startsWith("folders/") ||
           item.startsWith("images/") ||
           item.startsWith("media/") ||
           item.startsWith("source/")

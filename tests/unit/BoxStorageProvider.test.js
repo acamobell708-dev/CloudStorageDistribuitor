@@ -368,7 +368,123 @@ test("refuses to delete a Box file outside the configured folder", async () => {
 
   await assert.rejects(
     provider.deleteCloudFile({ id: "file-2" }),
-    /not directly inside the configured folder/
+    /not inside the configured folder/
   );
   assert.equal(apiClient.calls.length, 1);
+});
+
+test("creates Box folders and uploads a folder item into its parent", async () => {
+  const apiClient = createApiClient([
+    { entries: [] },
+    {
+      id: "album-folder",
+      name: "Album",
+      type: "folder"
+    },
+    { entries: [] },
+    {
+      entries: [
+        {
+          id: "photo-file",
+          name: "photo.jpg",
+          sha1: "photo-sha1",
+          size: 5
+        }
+      ]
+    }
+  ]);
+  const provider = new BoxStorageProvider({
+    accountMaximumUploadSizeBytes: 1024,
+    apiClient,
+    folderId: "123"
+  });
+
+  const result = await provider.uploadFiles([
+    {
+      body: Buffer.from("photo"),
+      contentType: "image/jpeg",
+      filename: "photo.jpg",
+      relativePath: "Album/photo.jpg"
+    }
+  ]);
+  const createFolderCall = apiClient.calls[1];
+  const uploadCall = apiClient.calls[3];
+  const attributes = JSON.parse(
+    uploadCall.options.body.get("attributes")
+  );
+
+  assert.equal(result.files[0].path, "/Album/photo.jpg");
+  assert.equal(createFolderCall.options.method, "POST");
+  assert.deepEqual(JSON.parse(createFolderCall.options.body), {
+    name: "Album",
+    parent: {
+      id: "123"
+    }
+  });
+  assert.equal(attributes.parent.id, "album-folder");
+});
+
+test("browses nested Box folders inside the configured root", async () => {
+  const apiClient = createApiClient([
+    {
+      id: "album-folder",
+      name: "Album",
+      parent: {
+        id: "123"
+      },
+      path_collection: {
+        entries: [
+          {
+            id: "0",
+            name: "All Files"
+          },
+          {
+            id: "123",
+            name: "Storage"
+          }
+        ]
+      },
+      type: "folder"
+    },
+    {
+      entries: [
+        {
+          id: "nested-folder",
+          name: "Notes",
+          type: "folder"
+        },
+        {
+          file_version: {
+            id: "version-2"
+          },
+          id: "photo-file",
+          name: "photo.jpg",
+          size: 5,
+          type: "file"
+        }
+      ]
+    }
+  ]);
+  const provider = new BoxStorageProvider({
+    accountMaximumUploadSizeBytes: 1024,
+    apiClient,
+    folderId: "123"
+  });
+
+  const listing = await provider.browseCloudFiles({
+    id: "album-folder"
+  });
+
+  assert.equal(listing.folder.path, "/Album");
+  assert.deepEqual(
+    listing.breadcrumbs.map((entry) => entry.name),
+    ["Box", "Album"]
+  );
+  assert.deepEqual(
+    listing.files.map((entry) => [entry.name, entry.type, entry.path]),
+    [
+      ["Notes", "folder", "/Album/Notes"],
+      ["photo.jpg", "file", "/Album/photo.jpg"]
+    ]
+  );
 });

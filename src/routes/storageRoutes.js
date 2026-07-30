@@ -4,6 +4,8 @@ const os = require("node:os");
 const path = require("node:path");
 const { permissions } = require("../services/auth/permissions");
 
+const maximumBrowserUploadFiles = 250;
+
 function createProviderUploadMiddleware({
   providerFactory,
   uploadTempDirectory
@@ -16,9 +18,9 @@ function createProviderUploadMiddleware({
       const uploadOptions = {
         limits: {
           fileSize: maximumUploadSizeBytes,
-          files: 1,
-          fields: 0,
-          parts: 2
+          files: maximumBrowserUploadFiles,
+          fields: 1,
+          parts: maximumBrowserUploadFiles + 1
         }
       };
 
@@ -30,11 +32,22 @@ function createProviderUploadMiddleware({
           path.join(os.tmpdir(), "cloud-storage-distributor");
       }
 
-      const upload = multer(uploadOptions).single("file");
+      const upload = multer(uploadOptions).fields([
+        {
+          maxCount: 1,
+          name: "file"
+        },
+        {
+          maxCount: maximumBrowserUploadFiles,
+          name: "files"
+        }
+      ]);
 
       upload(request, response, (error) => {
-        if (request.file) {
-          request.file.temporary = Boolean(request.file.path);
+        for (const files of Object.values(request.files || {})) {
+          for (const file of files) {
+            file.temporary = Boolean(file.path);
+          }
         }
 
         next(error);
@@ -91,5 +104,6 @@ function createStorageRoutes({
 }
 
 module.exports = {
-  createStorageRoutes
+  createStorageRoutes,
+  maximumBrowserUploadFiles
 };

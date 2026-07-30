@@ -107,6 +107,33 @@ function createTestApplication(overrides = {}) {
         version: "version-1"
       }
     ],
+    browseCloudFiles: async (folderReference) => {
+      overrides.onBrowse?.(key, folderReference);
+
+      return {
+        breadcrumbs: [
+          {
+            id: key === "box" ? "root-folder" : "/",
+            name: displayName,
+            path: "/"
+          }
+        ],
+        files: [
+          {
+            id: `${key}-folder-1`,
+            name: "Uploaded folder",
+            path: "/Uploaded folder",
+            provider: key,
+            type: "folder"
+          }
+        ],
+        folder: {
+          id: key === "box" ? "root-folder" : "/",
+          name: displayName,
+          path: "/"
+        }
+      };
+    },
     maximumUploadSizeBytes:
       overrides.maximumUploadSizeBytes || 1024,
     supportedFileActions:
@@ -125,6 +152,31 @@ function createTestApplication(overrides = {}) {
         provider: key,
         pushed: true,
         size: file.size
+      };
+    },
+    uploadFiles: async (files) => {
+      const uploaded = files.map((file, index) => {
+        overrides.onUpload?.(key, file);
+
+        return {
+          duplicate: false,
+          filename: `stored-${file.originalname}`,
+          id: `${key}-file-${index + 1}`,
+          originalName: file.originalname,
+          path:
+            key === "azure"
+              ? `folders/${file.relativePath}`
+              : `/${file.relativePath || file.originalname}`,
+          provider: key,
+          pushed: true,
+          size: file.size
+        };
+      });
+
+      return {
+        files: uploaded,
+        provider: key,
+        pushed: true
       };
     }
   });
@@ -425,6 +477,36 @@ test("lists current cloud files through the selected provider", async () => {
   );
 });
 
+test("browses a cloud folder through the shared listing route", async () => {
+  let browsedFolder;
+  const app = createTestApplication({
+    onBrowse: (providerKey, folderReference) => {
+      assert.equal(providerKey, "box");
+      browsedFolder = folderReference;
+    }
+  });
+
+  await withAuthenticatedServer(app, async (baseUrl, authenticatedFetch) => {
+    const response = await authenticatedFetch(
+      `${baseUrl}/api/storage/box/files?` +
+        new URLSearchParams({
+          browse: "true",
+          folderId: "folder-123",
+          path: "/Uploaded folder"
+        })
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.files[0].type, "folder");
+    assert.equal(body.folder.path, "/");
+    assert.deepEqual(browsedFolder, {
+      id: "folder-123",
+      path: "/Uploaded folder"
+    });
+  });
+});
+
 test("streams a selected cloud file to the browser as an attachment", async () => {
   await withAuthenticatedServer(
     createTestApplication(),
@@ -576,6 +658,88 @@ test("accepts a browser multipart upload and returns the Box result", async () =
     assert.equal(body.message, "hello.txt was sent to Box");
     }
   );
+});
+
+test("accepts multiple browser files through the shared upload route", async () => {
+  const receivedFiles = [];
+  const app = createTestApplication({
+    onUpload: (providerKey, file) => {
+      assert.equal(providerKey, "box");
+      receivedFiles.push(file);
+    }
+  });
+
+  await withAuthenticatedServer(app, async (baseUrl, authenticatedFetch) => {
+    const form = new FormData();
+    form.append("files", new Blob(["one"]), "one.txt");
+    form.append("files", new Blob(["two"]), "two.txt");
+    form.append(
+      "manifest",
+      JSON.stringify({
+        mode: "multiple",
+        paths: ["one.txt", "two.txt"]
+      })
+    );
+
+    const response = await authenticatedFetch(
+      `${baseUrl}/api/storage/box/files`,
+      {
+        body: form,
+        method: "POST"
+      }
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(body.files.length, 2);
+    assert.equal(body.mode, "multiple");
+    assert.equal(body.message, "2 files were sent to Box");
+    assert.equal(receivedFiles.length, 2);
+    assert.equal(receivedFiles[0].relativePath, undefined);
+  });
+});
+
+test("preserves safe relative paths for a browser folder upload", async () => {
+  const receivedFiles = [];
+  const app = createTestApplication({
+    onUpload: (providerKey, file) => {
+      assert.equal(providerKey, "azure");
+      receivedFiles.push(file);
+    }
+  });
+
+  await withAuthenticatedServer(app, async (baseUrl, authenticatedFetch) => {
+    const form = new FormData();
+    form.append("files", new Blob(["cover"]), "cover.png");
+    form.append("files", new Blob(["notes"]), "notes.txt");
+    form.append(
+      "manifest",
+      JSON.stringify({
+        mode: "folder",
+        paths: ["Album/cover.png", "Album/Notes/notes.txt"]
+      })
+    );
+
+    const response = await authenticatedFetch(
+      `${baseUrl}/api/storage/azure/files`,
+      {
+        body: form,
+        method: "POST"
+      }
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(body.mode, "folder");
+    assert.equal(
+      body.message,
+      "Album (2 files) was sent to Azure Repos"
+    );
+    assert.deepEqual(
+      receivedFiles.map((file) => file.relativePath),
+      ["Album/cover.png", "Album/Notes/notes.txt"]
+    );
+  });
 });
 
 test("rejects a browser upload above the server limit", async () => {

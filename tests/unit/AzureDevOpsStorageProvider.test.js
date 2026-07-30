@@ -400,6 +400,124 @@ test("uses a readable remote filename when Azure already has that name", async (
   assert.equal(pushedPath, "/images/photo (2).png");
 });
 
+test("uploads an Azure folder hierarchy in one versioned push", async () => {
+  let pushedChanges;
+  const apiClient = {
+    createFilePush: async ({ changes }) => {
+      pushedChanges = changes;
+      return {
+        commits: [
+          {
+            commitId: "folder-commit"
+          }
+        ]
+      };
+    },
+    getBranchReference: async () => ({
+      name: "refs/heads/main",
+      objectId: "previous-commit"
+    }),
+    isConfigured: () => true,
+    listRepositoryItems: async () => []
+  };
+  const provider = createProvider({
+    apiClient,
+    localDataRepositoryEnabled: false
+  });
+
+  const result = await provider.uploadFiles([
+    {
+      body: Buffer.from("cover"),
+      contentType: "image/png",
+      filename: "cover.png",
+      relativePath: "Album/cover.png"
+    },
+    {
+      body: Buffer.from("notes"),
+      contentType: "text/plain",
+      filename: "notes.txt",
+      relativePath: "Album/Notes/notes.txt"
+    }
+  ]);
+
+  assert.equal(result.files.length, 2);
+  assert.deepEqual(
+    pushedChanges.map((change) => change.path),
+    [
+      "/folders/Album/cover.png",
+      "/folders/Album/Notes/notes.txt"
+    ]
+  );
+  assert.deepEqual(
+    result.files.map((file) => file.path),
+    [
+      "folders/Album/cover.png",
+      "folders/Album/Notes/notes.txt"
+    ]
+  );
+});
+
+test("browses immediate Azure files and folders with breadcrumbs", async () => {
+  const apiClient = {
+    createFileWebUrl: (filePath) => `https://azure.test${filePath}`,
+    isConfigured: () => true,
+    listRepositoryItems: async () => [
+      {
+        gitObjectType: "tree",
+        isFolder: true,
+        objectId: "folders-tree",
+        path: "/folders"
+      },
+      {
+        gitObjectType: "tree",
+        isFolder: true,
+        objectId: "album-tree",
+        path: "/folders/Album"
+      },
+      {
+        gitObjectType: "blob",
+        isFolder: false,
+        objectId: "cover-blob",
+        path: "/folders/Album/cover.png",
+        size: 5
+      },
+      {
+        gitObjectType: "tree",
+        isFolder: true,
+        objectId: "notes-tree",
+        path: "/folders/Album/Notes"
+      }
+    ]
+  };
+  const provider = createProvider({ apiClient });
+
+  const listing = await provider.browseCloudFiles({
+    path: "/folders/Album"
+  });
+
+  assert.deepEqual(
+    listing.breadcrumbs.map((entry) => entry.name),
+    ["Azure Repos", "Album"]
+  );
+  assert.deepEqual(
+    listing.files.map((entry) => [entry.name, entry.type]),
+    [
+      ["Notes", "folder"],
+      ["cover.png", "file"]
+    ]
+  );
+  assert.equal(listing.files[1].size, 5);
+
+  const rootListing = await provider.browseCloudFiles({
+    path: "/"
+  });
+
+  assert.deepEqual(
+    rootListing.files.map((entry) => [entry.name, entry.path]),
+    [["Album", "/folders/Album"]]
+  );
+});
+
 test("refuses to use the application repository as Azure data storage", () => {
   const applicationRoot = path.resolve("application-root");
 

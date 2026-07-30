@@ -10,13 +10,16 @@ import { AppShell } from "./components/AppShell";
 import { Icon } from "./components/Icon";
 import { ProviderPanel } from "./components/ProviderPanel";
 import { UploadResult } from "./components/UploadResult";
+import { UploadModeSelector } from "./components/UploadModeSelector";
 
 const defaultMaximumUploadSizeBytes = 50 * 1024 * 1024;
+const maximumBrowserUploadFiles = 250;
 
 export default function App() {
   const { hasPermission, user } = useAuthSession();
   const apiClient = useMemo(() => new StorageApiClient(), []);
-  const [file, setFile] = useState();
+  const [files, setFiles] = useState([]);
+  const [uploadMode, setUploadMode] = useState("single");
   const [providers, setProviders] = useState([]);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [providerError, setProviderError] = useState();
@@ -41,7 +44,7 @@ export default function App() {
   const accessDenied = query.get("access") === "denied";
   const canUpload = Boolean(
     canWrite &&
-      file &&
+      files.length > 0 &&
       selectedProvider?.configured &&
       !selectedProvider?.connectionError &&
       !uploading
@@ -67,25 +70,44 @@ export default function App() {
     };
   }, [apiClient]);
 
-  function selectFile(selectedFile) {
+  function selectFiles(selectedFiles) {
     if (!canWrite) {
       return;
     }
 
-    if (selectedFile.size === 0) {
+    if (selectedFiles.length > maximumBrowserUploadFiles) {
       setUpload((current) => ({
         ...current,
-        error: "The selected file is empty",
+        error:
+          `Choose no more than ${maximumBrowserUploadFiles} files per upload`,
         status: "error"
       }));
       return;
     }
 
-    if (selectedFile.size > maximumUploadSizeBytes) {
+    const emptyFile = selectedFiles.find(
+      (selection) => selection.file.size === 0
+    );
+
+    if (emptyFile) {
+      setUpload((current) => ({
+        ...current,
+        error: `${emptyFile.file.name} is empty`,
+        status: "error"
+      }));
+      return;
+    }
+
+    const oversizedFile = selectedFiles.find(
+      (selection) =>
+        selection.file.size > maximumUploadSizeBytes
+    );
+
+    if (oversizedFile) {
       setUpload((current) => ({
         ...current,
         error:
-          `Choose a file that is ${formatBytes(
+          `${oversizedFile.file.name} must be ${formatBytes(
             maximumUploadSizeBytes
           )} or smaller`,
         status: "error"
@@ -93,7 +115,7 @@ export default function App() {
       return;
     }
 
-    setFile(selectedFile);
+    setFiles(selectedFiles);
     setUpload({
       error: undefined,
       progress: 0,
@@ -103,7 +125,7 @@ export default function App() {
   }
 
   function reset() {
-    setFile(undefined);
+    setFiles([]);
     setUpload({
       error: undefined,
       progress: 0,
@@ -114,6 +136,11 @@ export default function App() {
 
   function selectProvider(providerKey) {
     setSelectedProviderKey(providerKey);
+    reset();
+  }
+
+  function selectUploadMode(mode) {
+    setUploadMode(mode);
     reset();
   }
 
@@ -130,8 +157,9 @@ export default function App() {
     });
 
     try {
-      const result = await apiClient.uploadFile({
-        file,
+      const result = await apiClient.uploadFiles({
+        files,
+        mode: uploadMode,
         onProgress: (progress) =>
           setUpload((current) => ({ ...current, progress })),
         provider: selectedProviderKey
@@ -193,10 +221,10 @@ export default function App() {
                 Secure cloud transfer
               </span>
               <h1>
-                One file. <em>Right where it belongs.</em>
+                Every upload. <em>Right where it belongs.</em>
               </h1>
               <p>
-                Send files to Box or version media in Azure Repos—without
+                Send files and folders to Box or Azure Repos—without
                 exposing a single credential or mixing storage data into this
                 application repository.
               </p>
@@ -217,7 +245,7 @@ export default function App() {
               <div className="panel-heading">
                 <div>
                   <span className="eyebrow">New transfer</span>
-                  <h2>Choose your file</h2>
+                  <h2>Choose what to upload</h2>
                 </div>
                 <span className="step-label">Step 1 of 1</span>
               </div>
@@ -227,7 +255,7 @@ export default function App() {
               ) : (
                 <>
                   <label className="provider-select">
-                    <span>Send this file to</span>
+                    <span>Send this upload to</span>
                     <span className="provider-select-control">
                       <Icon
                         name={
@@ -258,6 +286,12 @@ export default function App() {
                     </span>
                   </label>
 
+                  <UploadModeSelector
+                    disabled={!canWrite || uploading || providersLoading}
+                    onSelect={selectUploadMode}
+                    selectedMode={uploadMode}
+                  />
+
                   <FileDropzone
                     acceptedDescription={
                       selectedProviderKey === "azure"
@@ -270,10 +304,11 @@ export default function App() {
                     disabled={
                       !canWrite || uploading || providersLoading
                     }
-                    file={file}
+                    files={files}
                     maximumUploadSizeBytes={maximumUploadSizeBytes}
                     onClear={reset}
-                    onSelect={selectFile}
+                    mode={uploadMode}
+                    onSelect={selectFiles}
                   />
 
                   {(upload.error || providerError) && (
@@ -296,7 +331,9 @@ export default function App() {
                         <span>
                           {upload.progress < 92
                             ? "Sending to the secure server"
-                            : "Completing the Box handoff"}
+                            : `Completing the ${
+                                selectedProvider?.displayName || "cloud"
+                              } handoff`}
                         </span>
                         <strong>{upload.progress}%</strong>
                       </div>
@@ -329,7 +366,13 @@ export default function App() {
                     <span>
                       {uploading
                         ? "Sending securely…"
-                        : `Send to ${
+                        : `Send ${
+                            files.length > 1
+                              ? `${files.length} files`
+                              : uploadMode === "folder"
+                                ? "folder"
+                                : "file"
+                          } to ${
                             selectedProvider?.displayName || "storage"
                           }`}
                     </span>

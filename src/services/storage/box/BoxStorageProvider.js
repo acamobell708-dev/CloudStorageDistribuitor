@@ -7,6 +7,7 @@ const {
 } = require("../../../errors/ApplicationError");
 const { FileNamingService } = require("../FileNamingService");
 const { StorageProvider } = require("../StorageProvider");
+const { UploadPathService } = require("../UploadPathService");
 const { BoxApiClient } = require("./BoxApiClient");
 const { BoxAuthClient } = require("./BoxAuthClient");
 
@@ -28,6 +29,8 @@ class BoxStorageProvider extends StorageProvider {
     this.downloadDirectory = options.downloadDirectory;
     this.fileNamingService =
       options.fileNamingService || new FileNamingService();
+    this.uploadPathService =
+      options.uploadPathService || new UploadPathService();
     this.apiClient =
       options.apiClient ||
       new BoxApiClient({
@@ -83,10 +86,10 @@ class BoxStorageProvider extends StorageProvider {
     return accountLimit;
   }
 
-  async listFiles() {
+  async listFolderItems(folderId = this.folderId) {
     this.requireConfiguration();
 
-    const files = [];
+    const items = [];
     let marker;
 
     do {
@@ -103,47 +106,232 @@ class BoxStorageProvider extends StorageProvider {
 
       const result = await this.apiClient.requestJson(
         `${this.apiClient.apiUrl}/folders/` +
-          `${encodeURIComponent(this.folderId)}/items?${query}`,
+          `${encodeURIComponent(folderId)}/items?${query}`,
         {
           action: "Listing files in the configured Box folder"
         }
       );
 
-      for (const entry of result?.entries || []) {
-        if (entry.type === "file") {
-          files.push(entry);
-        }
-      }
+      items.push(...(result?.entries || []));
 
       marker = result?.next_marker || undefined;
     } while (marker);
 
-    return files;
+    return items;
+  }
+
+  async listFiles(folderId = this.folderId) {
+    return (await this.listFolderItems(folderId)).filter(
+      (entry) => entry.type === "file"
+    );
+  }
+
+  normalizeCloudFile(file, folderPath = "") {
+    const normalizedFolderPath = String(folderPath || "").replace(
+      /\/+$/,
+      ""
+    );
+
+    return {
+      id: file.id,
+      modifiedAt: file.modified_at,
+      name: this.fileNamingService.getDisplayName(file.name),
+      path: `${normalizedFolderPath}/${file.name}`,
+      provider: this.key,
+      sha1: file.sha1,
+      size: Number(file.size) || 0,
+      storedName: file.name,
+      type: "file",
+      version: file.file_version?.id,
+      webUrl: `https://app.box.com/file/${encodeURIComponent(file.id)}`
+    };
   }
 
   async listCloudFiles() {
-    const files = await this.listFiles();
+    this.requireConfiguration();
 
-    return files
-      .map((file) => ({
-        id: file.id,
-        modifiedAt: file.modified_at,
-        name: this.fileNamingService.getDisplayName(file.name),
-        path: `/${file.name}`,
-        provider: this.key,
-        sha1: file.sha1,
-        size: Number(file.size) || 0,
-        storedName: file.name,
-        version: file.file_version?.id,
-        webUrl: `https://app.box.com/file/${encodeURIComponent(file.id)}`
-      }))
-      .sort((first, second) => first.name.localeCompare(second.name));
+    const files = [];
+    const folders = [
+      {
+        id: this.folderId,
+        path: ""
+      }
+    ];
+    const visited = new Set();
+
+    while (folders.length > 0) {
+      const folder = folders.shift();
+
+      if (visited.has(String(folder.id))) {
+        continue;
+      }
+
+      visited.add(String(folder.id));
+
+      for (const item of await this.listFolderItems(folder.id)) {
+        if (item.type === "folder") {
+          folders.push({
+            id: item.id,
+            path: `${folder.path}/${item.name}`
+          });
+        } else if (item.type === "file") {
+          files.push(this.normalizeCloudFile(item, folder.path));
+        }
+      }
+    }
+
+    return files.sort((first, second) =>
+      first.path.localeCompare(second.path)
+    );
+  }
+
+  async getFolderInfo(folderId) {
+    this.requireConfiguration();
+
+    if (!folderId) {
+      throw new ValidationError("A Box folder ID is required");
+    }
+
+    const query = new URLSearchParams({
+      fields: "id,type,name,modified_at,parent,path_collection"
+    });
+
+    return this.apiClient.requestJson(
+      `${this.apiClient.apiUrl}/folders/` +
+        `${encodeURIComponent(folderId)}?${query}`,
+      { action: `Reading Box folder ${folderId}` }
+    );
+  }
+
+  isInsideConfiguredFolder(item) {
+    if (String(item?.id) === String(this.folderId)) {
+      return true;
+    }
+
+    if (String(item?.parent?.id) === String(this.folderId)) {
+      return true;
+    }
+
+    return (item?.path_collection?.entries || []).some(
+      (entry) => String(entry.id) === String(this.folderId)
+    );
+  }
+
+  requireItemInConfiguredFolder(item) {
+    if (!this.isInsideConfiguredFolder(item)) {
+      throw new ValidationError(
+        `Box item ${item?.id} is not inside the configured folder`
+      );
+    }
+  }
+
+  getFolderNavigation(folder) {
+    if (String(folder.id) === String(this.folderId)) {
+      return {
+        breadcrumbs: [
+          {
+            id: this.folderId,
+            name: this.displayName,
+            path: "/"
+          }
+        ],
+        path: "/"
+      };
+    }
+
+    const ancestry = folder.path_collection?.entries || [];
+    const rootIndex = ancestry.findIndex(
+      (entry) => String(entry.id) === String(this.folderId)
+    );
+    const descendants =
+      rootIndex === -1 ? [] : ancestry.slice(rootIndex + 1);
+    const navigationEntries = [
+      {
+        id: this.folderId,
+        name: this.displayName,
+        path: "/"
+      }
+    ];
+    let currentPath = "";
+
+    for (const entry of [...descendants, folder]) {
+      currentPath += `/${entry.name}`;
+      navigationEntries.push({
+        id: entry.id,
+        name: entry.name,
+        path: currentPath
+      });
+    }
+
+    return {
+      breadcrumbs: navigationEntries,
+      path: currentPath || "/"
+    };
+  }
+
+  async browseCloudFiles(folderReference = {}) {
+    const folderId = String(
+      folderReference.id || this.folderId
+    ).trim();
+    const folder =
+      folderId === String(this.folderId)
+        ? {
+            id: this.folderId,
+            name: this.displayName,
+            type: "folder"
+          }
+        : await this.getFolderInfo(folderId);
+
+    this.requireItemInConfiguredFolder(folder);
+
+    const navigation = this.getFolderNavigation(folder);
+    const items = (await this.listFolderItems(folderId))
+      .filter((item) => ["file", "folder"].includes(item.type))
+      .map((item) =>
+        item.type === "folder"
+          ? {
+              id: item.id,
+              modifiedAt: item.modified_at,
+              name: item.name,
+              path:
+                navigation.path === "/"
+                  ? `/${item.name}`
+                  : `${navigation.path}/${item.name}`,
+              provider: this.key,
+              type: "folder",
+              webUrl:
+                `https://app.box.com/folder/` +
+                encodeURIComponent(item.id)
+            }
+          : this.normalizeCloudFile(
+              item,
+              navigation.path === "/" ? "" : navigation.path
+            )
+      )
+      .sort(
+        (first, second) =>
+          (first.type === second.type
+            ? first.name.localeCompare(second.name)
+            : first.type === "folder"
+              ? -1
+              : 1)
+      );
+
+    return {
+      breadcrumbs: navigation.breadcrumbs,
+      files: items,
+      folder: {
+        id: folder.id,
+        name: folder.name,
+        path: navigation.path
+      }
+    };
   }
 
   async downloadCloudFile(fileReference) {
     const fileId = String(fileReference?.id || "").trim();
     const file = await this.getFileInfo(fileId);
-    this.requireFileInConfiguredFolder(file);
+    this.requireItemInConfiguredFolder(file);
 
     const response = await this.apiClient.request(
       `${this.apiClient.apiUrl}/files/${encodeURIComponent(fileId)}/content`,
@@ -180,7 +368,8 @@ class BoxStorageProvider extends StorageProvider {
     }
 
     const query = new URLSearchParams({
-      fields: "id,type,name,size,sha1,etag,modified_at,parent"
+      fields:
+        "id,type,name,size,sha1,etag,modified_at,parent,path_collection"
     });
 
     return this.apiClient.requestJson(
@@ -189,15 +378,22 @@ class BoxStorageProvider extends StorageProvider {
     );
   }
 
-  requireFileInConfiguredFolder(file) {
-    if (String(file.parent?.id) !== String(this.folderId)) {
-      throw new ValidationError(
-        `Box file ${file.id} is not directly inside the configured folder`
-      );
-    }
+  async uploadFile(fileOrBody, originalName, contentType) {
+    return this.uploadFileToFolder(
+      fileOrBody,
+      this.folderId,
+      originalName,
+      contentType
+    );
   }
 
-  async uploadFile(fileOrBody, originalName, contentType) {
+  async uploadFileToFolder(
+    fileOrBody,
+    folderId,
+    originalName,
+    contentType,
+    folderPath = ""
+  ) {
     this.requireConfiguration();
 
     const suppliedFile = Buffer.isBuffer(fileOrBody)
@@ -219,7 +415,7 @@ class BoxStorageProvider extends StorageProvider {
       file,
       "sha1"
     );
-    const currentFiles = await this.listFiles();
+    const currentFiles = await this.listFiles(folderId);
     const existing = currentFiles.find(
       (item) =>
         String(item.sha1 || "").toLowerCase() ===
@@ -234,6 +430,7 @@ class BoxStorageProvider extends StorageProvider {
         hash,
         id: existing.id,
         originalName: file.filename,
+        path: `${folderPath}/${existing.name}`.replace(/^\/?/, "/"),
         provider: this.key,
         pushed: true,
         sha1: existing.sha1,
@@ -248,8 +445,8 @@ class BoxStorageProvider extends StorageProvider {
     );
     const uploaded =
       file.size > this.directUploadMaximumSizeBytes
-        ? await this.uploadChunkedFile(file, filename)
-        : await this.uploadDirectFile(file, filename);
+        ? await this.uploadChunkedFile(file, filename, folderId)
+        : await this.uploadDirectFile(file, filename, folderId);
 
     return {
       duplicate: false,
@@ -257,6 +454,7 @@ class BoxStorageProvider extends StorageProvider {
       hash,
       id: uploaded.id,
       originalName: file.filename,
+      path: `${folderPath}/${uploaded.name}`.replace(/^\/?/, "/"),
       provider: this.key,
       pushed: true,
       sha1: uploaded.sha1,
@@ -268,7 +466,7 @@ class BoxStorageProvider extends StorageProvider {
     };
   }
 
-  async uploadDirectFile(file, filename) {
+  async uploadDirectFile(file, filename, folderId = this.folderId) {
     const fileBody = file.body || (await fs.readFile(file.path));
     const form = new FormData();
 
@@ -278,7 +476,7 @@ class BoxStorageProvider extends StorageProvider {
       JSON.stringify({
         name: filename,
         parent: {
-          id: this.folderId
+          id: folderId
         }
       })
     );
@@ -307,7 +505,7 @@ class BoxStorageProvider extends StorageProvider {
     return uploaded;
   }
 
-  async uploadChunkedFile(file, filename) {
+  async uploadChunkedFile(file, filename, folderId = this.folderId) {
     let session;
 
     try {
@@ -318,7 +516,7 @@ class BoxStorageProvider extends StorageProvider {
           body: JSON.stringify({
             file_name: filename,
             file_size: file.size,
-            folder_id: this.folderId
+            folder_id: folderId
           }),
           headers: {
             "Content-Type": "application/json"
@@ -451,16 +649,94 @@ class BoxStorageProvider extends StorageProvider {
     }
 
     const uploadedFiles = [];
+    const folderCache = new Map([["", this.folderId]]);
 
     for (const file of files) {
-      uploadedFiles.push(await this.uploadFile(file));
+      const relativeDirectory = this.uploadPathService.getDirectory(
+        file.relativePath
+      );
+      const folderId = await this.ensureFolderPath(
+        relativeDirectory,
+        folderCache
+      );
+
+      uploadedFiles.push(
+        await this.uploadFileToFolder(
+          file,
+          folderId,
+          undefined,
+          undefined,
+          relativeDirectory
+            ? `/${relativeDirectory}`
+            : ""
+        )
+      );
     }
 
     return {
+      files: uploadedFiles,
       images: uploadedFiles,
       provider: this.key,
       pushed: true
     };
+  }
+
+  async ensureFolderPath(relativeDirectory, folderCache) {
+    if (!relativeDirectory) {
+      return this.folderId;
+    }
+
+    const segments = relativeDirectory.split("/");
+    let parentId = this.folderId;
+    let currentPath = "";
+
+    for (const segment of segments) {
+      currentPath = currentPath
+        ? `${currentPath}/${segment}`
+        : segment;
+
+      if (folderCache.has(currentPath)) {
+        parentId = folderCache.get(currentPath);
+        continue;
+      }
+
+      const existing = (await this.listFolderItems(parentId)).find(
+        (item) =>
+          item.type === "folder" &&
+          item.name.localeCompare(segment, undefined, {
+            sensitivity: "accent"
+          }) === 0
+      );
+      let folder = existing;
+
+      if (!folder) {
+        folder = await this.apiClient.requestJson(
+          `${this.apiClient.apiUrl}/folders`,
+          {
+            action: `Creating Box folder ${segment}`,
+            body: JSON.stringify({
+              name: segment,
+              parent: {
+                id: parentId
+              }
+            }),
+            headers: {
+              "Content-Type": "application/json"
+            },
+            method: "POST"
+          }
+        );
+      }
+
+      if (!folder?.id) {
+        throw new Error(`Box did not return folder ${segment}`);
+      }
+
+      parentId = folder.id;
+      folderCache.set(currentPath, parentId);
+    }
+
+    return parentId;
   }
 
   async downloadFile(fileId, destinationDirectory = this.downloadDirectory) {
@@ -471,7 +747,7 @@ class BoxStorageProvider extends StorageProvider {
     }
 
     const file = await this.getFileInfo(fileId);
-    this.requireFileInConfiguredFolder(file);
+    this.requireItemInConfiguredFolder(file);
 
     const destination = path.resolve(destinationDirectory);
     await fs.mkdir(destination, { recursive: true });
@@ -528,7 +804,7 @@ class BoxStorageProvider extends StorageProvider {
     this.requireConfiguration();
 
     const file = await this.getFileInfo(fileId);
-    this.requireFileInConfiguredFolder(file);
+    this.requireItemInConfiguredFolder(file);
 
     await this.apiClient.request(
       `${this.apiClient.apiUrl}/files/${encodeURIComponent(fileId)}`,

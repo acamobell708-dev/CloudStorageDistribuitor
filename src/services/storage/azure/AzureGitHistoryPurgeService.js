@@ -15,6 +15,7 @@ const {
 const defaultExecFileAsync = promisify(execFile);
 const managedPathPrefixes = [
   "documents/",
+  "folders/",
   "images/",
   "media/",
   "source/"

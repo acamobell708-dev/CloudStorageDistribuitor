@@ -89,6 +89,7 @@ class StorageProvider {
       contentType,
       path: filePath,
       filename,
+      relativePath: file?.relativePath,
       size
     };
   }
@@ -101,6 +102,17 @@ class StorageProvider {
     throw new Error(
       `${this.displayName} does not implement listCloudFiles()`
     );
+  }
+
+  async browseCloudFiles() {
+    return {
+      breadcrumbs: [{ name: this.displayName, path: "/" }],
+      files: await this.listCloudFiles(),
+      folder: {
+        name: this.displayName,
+        path: "/"
+      }
+    };
   }
 
   async downloadCloudFile() {

@@ -30,20 +30,22 @@ text, CSV, Markdown, JSON, and XML formats. Common web, scripting, and compiled
 language source files are also accepted, including HTML, CSS, JavaScript,
 TypeScript, Python, Java, C/C++, C#, Go, Rust, PHP, Ruby, Swift, SQL, and shell
 scripts. Files are stored under `documents/`, `source/`, `images/`,
-`media/audio/`, or `media/video/`.
+`media/audio/`, `media/video/`, or the managed `folders/` tree.
 
 ## Data flow
 
-1. React sends the selected file as multipart data to
+1. React sends the selected file, file batch, or folder manifest as multipart
+   data to
    `POST /api/storage/:provider/files`.
-2. Azure request data stays in memory. Box uses temporary disk staging so its
-   account-sized and chunked uploads do not consume equivalent server memory.
+2. Browser uploads use temporary disk staging so multi-file and folder
+   transfers do not consume equivalent server memory.
 3. The provider factory selects Box or Azure.
 4. The provider validates the original filename, type, and provider limit.
-5. Box uploads directly or in chunks. Azure creates a remote Git commit through
-   the Azure DevOps Pushes REST API using base64-encoded request content.
-6. Azure never writes browser uploads to `AzureDataRepo`. Box request staging
-   is deleted on success or failure.
+5. Box creates any required folders and uploads directly or in chunks. Azure
+   creates one remote Git commit for the batch through the Azure DevOps Pushes
+   REST API using base64-encoded request content.
+6. Azure never writes browser uploads to `AzureDataRepo`. Temporary request
+   staging is deleted on success or failure.
 
 The Manage Files page calls `GET /api/storage/:provider/files`. Box is read
 through its folder API, while Azure is read from the configured remote branch
@@ -147,8 +149,9 @@ AUTH_SECURE_COOKIE=false
 UPLOAD_TEMP_DIR=
 ```
 
-`UPLOAD_TEMP_DIR` applies to disk-backed providers such as Box, not Azure
-browser uploads. Set `AUTH_SECURE_COOKIE=true` when serving through HTTPS.
+`UPLOAD_TEMP_DIR` applies to Box and Azure browser uploads. Leave it blank to
+use the operating system temporary directory. Set `AUTH_SECURE_COOKIE=true`
+when serving through HTTPS.
 
 ## Run
 

@@ -30,7 +30,7 @@ export function createFileKey(file) {
   return JSON.stringify([file.provider, file.id, file.path]);
 }
 
-function handleRowKeyDown(event, file, onSelect) {
+function handleRowKeyDown(event, file, onOpenFolder, onSelect) {
   if (
     event.target !== event.currentTarget ||
     !["Enter", " "].includes(event.key)
@@ -39,7 +39,11 @@ function handleRowKeyDown(event, file, onSelect) {
   }
 
   event.preventDefault();
-  onSelect(file);
+  if (file.type === "folder") {
+    onOpenFolder(file);
+  } else {
+    onSelect(file);
+  }
 }
 
 export function FileList({
@@ -47,6 +51,7 @@ export function FileList({
   files,
   onDelete,
   onDownload,
+  onOpenFolder,
   onSelect,
   providerName,
   selectedFileKey,
@@ -58,10 +63,10 @@ export function FileList({
         <span className="files-empty-icon">
           <Icon name="folder" size={25} />
         </span>
-        <h2>No files found</h2>
+        <h2>This folder is empty</h2>
         <p>
-          The configured {providerName} location does not currently contain
-          any files.
+          The current {providerName} folder does not contain any files or
+          subfolders.
         </p>
       </div>
     );
@@ -84,31 +89,53 @@ export function FileList({
             const fileKey = createFileKey(file);
             const selected = selectedFileKey === fileKey;
             const working = workingFileKey === fileKey;
+            const isFolder = file.type === "folder";
 
             return (
               <tr
                 aria-selected={selected}
-                className={`file-row${selected ? " is-selected" : ""}`}
+                className={
+                  `file-row${selected ? " is-selected" : ""}` +
+                  `${isFolder ? " is-folder" : ""}`
+                }
                 key={fileKey}
-                onClick={() => onSelect(file)}
+                onClick={() =>
+                  isFolder ? onOpenFolder(file) : onSelect(file)
+                }
                 onKeyDown={(event) =>
-                  handleRowKeyDown(event, file, onSelect)
+                  handleRowKeyDown(
+                    event,
+                    file,
+                    onOpenFolder,
+                    onSelect
+                  )
                 }
                 tabIndex="0"
                 title={
-                  selected
+                  isFolder
+                    ? `Open ${file.name}`
+                    : selected
                     ? `Manage ${file.name}`
                     : `Select ${file.name}`
                 }
               >
                 <td data-label="File">
                   <span className="file-type-icon">
-                    <Icon name="document" size={18} />
+                    <Icon
+                      name={isFolder ? "folder" : "document"}
+                      size={18}
+                    />
                   </span>
                   <span className="listed-file-name">
                     {file.name}
                   </span>
-                  {selected && (
+                  {isFolder && (
+                    <span className="folder-open-hint">
+                      Open
+                      <Icon name="chevron" size={13} />
+                    </span>
+                  )}
+                  {selected && !isFolder && (
                     <span className="file-row-actions">
                       <button
                         aria-label={`Download ${file.name}`}
@@ -145,15 +172,21 @@ export function FileList({
                   <code>{file.path}</code>
                 </td>
                 <td data-label="Size">
-                  {Number.isFinite(file.size)
+                  {isFolder
+                    ? "—"
+                    : Number.isFinite(file.size)
                     ? formatBytes(file.size)
                     : "Not supplied"}
                 </td>
                 <td data-label="Updated">{formatDate(file.modifiedAt)}</td>
                 <td data-label="Version">
-                  <code title={file.version}>
-                    {formatVersion(file.version)}
-                  </code>
+                  {isFolder ? (
+                    "—"
+                  ) : (
+                    <code title={file.version}>
+                      {formatVersion(file.version)}
+                    </code>
+                  )}
                 </td>
               </tr>
             );

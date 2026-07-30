@@ -15,6 +15,12 @@ test("accepts only normalized managed Azure storage paths", () => {
     service.normalizeManagedPath("media/video/clip.mp4"),
     "media/video/clip.mp4"
   );
+  assert.equal(
+    service.normalizeManagedPath(
+      "/folders/Project/Nested/report.pdf"
+    ),
+    "folders/Project/Nested/report.pdf"
+  );
   assert.throws(
     () => service.normalizeManagedPath("/../secret.txt"),
     /managed Azure storage paths/

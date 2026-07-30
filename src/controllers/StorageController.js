@@ -1,6 +1,9 @@
 const { ValidationError } = require("../errors/ApplicationError");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
+const {
+  UploadPathService
+} = require("../services/storage/UploadPathService");
 
 class StorageController {
   constructor({
@@ -17,6 +20,7 @@ class StorageController {
     this.fileUploadService = fileUploadService;
     this.permanentFileDeletionService = permanentFileDeletionService;
     this.providerFactory = providerFactory;
+    this.uploadPathService = new UploadPathService();
   }
 
   listProviders = async (request, response, next) => {
@@ -32,7 +36,11 @@ class StorageController {
   listFiles = async (request, response, next) => {
     try {
       response.json(
-        await this.fileListingService.list(request.params.provider)
+        await this.fileListingService.list(request.params.provider, {
+          browse: request.query.browse === "true",
+          folderId: request.query.folderId,
+          path: request.query.path
+        })
       );
     } catch (error) {
       next(error);
@@ -101,18 +109,32 @@ class StorageController {
 
   uploadFile = async (request, response, next) => {
     try {
-      if (!request.file) {
+      const files = [
+        ...(request.files?.file || []),
+        ...(request.files?.files || [])
+      ];
+
+      if (files.length === 0) {
         throw new ValidationError(
-          'Choose a file and submit it using the "file" form field'
+          'Choose one or more files and submit them using the "file" or "files" form field'
         );
       }
 
-      const result = await this.fileUploadService.upload(
+      const manifest = this.uploadPathService.applyManifest(
+        files,
+        request.body?.manifest
+      );
+      const result = await this.fileUploadService.uploadMany(
         request.params.provider,
-        request.file
+        files,
+        manifest
       );
 
-      response.status(result.file.duplicate ? 200 : 201).json(result);
+      response
+        .status(
+          result.duplicateCount === result.files.length ? 200 : 201
+        )
+        .json(result);
     } catch (error) {
       next(error);
     }

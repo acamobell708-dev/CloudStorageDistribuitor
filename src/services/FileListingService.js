@@ -3,12 +3,33 @@ class FileListingService {
     this.providerFactory = providerFactory;
   }
 
-  async list(providerKey) {
+  async list(providerKey, options = {}) {
     const provider = this.providerFactory.get(providerKey);
-    const files = await provider.listCloudFiles();
+    const listing = options.browse
+      ? typeof provider.browseCloudFiles === "function"
+        ? await provider.browseCloudFiles({
+            id: options.folderId,
+            path: options.path
+          })
+        : {
+            breadcrumbs: [
+              {
+                name: provider.displayName,
+                path: "/"
+              }
+            ],
+            files: await provider.listCloudFiles(),
+            folder: {
+              name: provider.displayName,
+              path: "/"
+            }
+          }
+      : {
+          files: await provider.listCloudFiles()
+        };
 
     return {
-      files,
+      ...listing,
       provider: {
         displayName: provider.displayName,
         key: provider.key

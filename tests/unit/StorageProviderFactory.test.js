@@ -24,7 +24,7 @@ test("creates the web Azure provider without local repository access", () => {
   });
   const provider = factory.get("azure");
 
-  assert.equal(provider.browserUploadStorage, "memory");
+  assert.equal(provider.browserUploadStorage, "disk");
   assert.equal(provider.localDataRepositoryEnabled, false);
   assert.equal(provider.dataRepoRoot, undefined);
   assert.notEqual(provider.dataRepoRoot, cliRepositoryPath);

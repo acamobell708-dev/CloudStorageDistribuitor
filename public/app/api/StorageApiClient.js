@@ -30,9 +30,25 @@ export class StorageApiClient {
   }
 
   async listFiles(provider, options = {}) {
+    const query = new URLSearchParams();
+
+    if (options.browse) {
+      query.set("browse", "true");
+    }
+
+    if (options.folder?.id) {
+      query.set("folderId", options.folder.id);
+    }
+
+    if (options.folder?.path) {
+      query.set("path", options.folder.path);
+    }
+
+    const queryString = query.toString();
     const response = await fetch(
       `${this.baseUrl}/storage/` +
-        `${encodeURIComponent(provider)}/files`,
+        `${encodeURIComponent(provider)}/files` +
+        (queryString ? `?${queryString}` : ""),
       {
         cache: "no-store",
         headers: {
@@ -123,11 +139,42 @@ export class StorageApiClient {
   }
 
   uploadFile({ file, onProgress, provider = "box" }) {
+    return this.uploadFiles({
+      files: [
+        {
+          file,
+          relativePath: file.name
+        }
+      ],
+      mode: "single",
+      onProgress,
+      provider
+    });
+  }
+
+  uploadFiles({
+    files,
+    mode = "single",
+    onProgress,
+    provider = "box"
+  }) {
     return new Promise((resolve, reject) => {
       const request = new XMLHttpRequest();
       const form = new FormData();
 
-      form.append("file", file, file.name);
+      for (const selection of files) {
+        form.append("files", selection.file, selection.file.name);
+      }
+      form.append(
+        "manifest",
+        JSON.stringify({
+          mode,
+          paths: files.map(
+            (selection) =>
+              selection.relativePath || selection.file.name
+          )
+        })
+      );
       request.open(
         "POST",
         `${this.baseUrl}/storage/${encodeURIComponent(provider)}/files`

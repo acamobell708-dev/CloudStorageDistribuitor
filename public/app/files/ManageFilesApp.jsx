@@ -21,6 +21,10 @@ export function ManageFilesApp() {
   const [providersLoading, setProvidersLoading] = useState(true);
   const [selectedProviderKey, setSelectedProviderKey] = useState("box");
   const [selectedFileKey, setSelectedFileKey] = useState();
+  const [folderReference, setFolderReference] = useState({});
+  const [navigation, setNavigation] = useState({
+    breadcrumbs: []
+  });
   const [fileAction, setFileAction] = useState({
     status: "idle"
   });
@@ -124,6 +128,8 @@ export function ManageFilesApp() {
 
     apiClient
       .listFiles(selectedProviderKey, {
+        browse: true,
+        folder: folderReference,
         signal: controller.signal
       })
       .then((result) => {
@@ -132,6 +138,10 @@ export function ManageFilesApp() {
         }
 
         setFiles(result.files || []);
+        setNavigation({
+          breadcrumbs: result.breadcrumbs || [],
+          folder: result.folder
+        });
         setListing({
           error: undefined,
           loading: false,
@@ -159,6 +169,7 @@ export function ManageFilesApp() {
     };
   }, [
     apiClient,
+    folderReference,
     listingConfigured,
     providersLoading,
     refreshRequest,
@@ -168,6 +179,8 @@ export function ManageFilesApp() {
 
   const selectProvider = (providerKey) => {
     setFiles([]);
+    setFolderReference({});
+    setNavigation({ breadcrumbs: [] });
     setFileAction({ status: "idle" });
     setPurgeDialog({ open: false });
     setSelectedFileKey(undefined);
@@ -189,6 +202,20 @@ export function ManageFilesApp() {
     setSelectedFileKey((currentKey) =>
       currentKey === fileKey ? undefined : fileKey
     );
+  };
+
+  const openFolder = (folder) => {
+    if (actionInProgress) {
+      return;
+    }
+
+    setFiles([]);
+    setFileAction({ status: "idle" });
+    setSelectedFileKey(undefined);
+    setFolderReference({
+      id: folder.id,
+      path: folder.path
+    });
   };
 
   const refreshFiles = (background = true) => {
@@ -415,6 +442,36 @@ export function ManageFilesApp() {
             </div>
           </header>
 
+          {navigation.breadcrumbs.length > 0 && (
+            <nav className="folder-breadcrumbs" aria-label="Folder path">
+              {navigation.breadcrumbs.map((breadcrumb, index) => (
+                <span
+                  key={`${breadcrumb.id || breadcrumb.path}:${index}`}
+                >
+                  {index > 0 && (
+                    <Icon name="chevron" size={13} />
+                  )}
+                  <button
+                    aria-current={
+                      index === navigation.breadcrumbs.length - 1
+                        ? "page"
+                        : undefined
+                    }
+                    disabled={
+                      actionInProgress ||
+                      index === navigation.breadcrumbs.length - 1
+                    }
+                    onClick={() => openFolder(breadcrumb)}
+                    type="button"
+                  >
+                    {index === 0 && <Icon name="folder" size={14} />}
+                    {breadcrumb.name}
+                  </button>
+                </span>
+              ))}
+            </nav>
+          )}
+
           {fileAction.status !== "idle" && (
             <div
               className={`file-action-status is-${fileAction.status}`}
@@ -457,6 +514,7 @@ export function ManageFilesApp() {
               files={files}
               onDelete={deleteFile}
               onDownload={downloadFile}
+              onOpenFolder={openFolder}
               onSelect={selectFile}
               providerName={selectedProvider?.displayName || "provider"}
               selectedFileKey={selectedFileKey}
