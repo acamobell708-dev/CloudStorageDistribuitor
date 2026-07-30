@@ -12,6 +12,8 @@ repository from one browser interface. Cloud credentials remain on the server.
 - Versioned Azure uploads sent directly to the remote repository API.
 - Live Box and Azure folder browsing with streamed downloads and recursive
   file or folder deletion.
+- Current-folder search with predictive suggestions, media filters, and
+  size, name, or modified-date sorting.
 - Owner-authorized Azure history purge for exceptional permanent deletion.
 - Interactive provider-capacity bars grouped by file type.
 - Predefined member accounts, in-memory sessions, and read-only guest access.

@@ -6,6 +6,8 @@ import { AppShell } from "../components/AppShell";
 import { Icon } from "../components/Icon";
 import { BrowserFileDownloadService } from "./BrowserFileDownloadService";
 import { createFileKey, FileList } from "./FileList";
+import { FileViewControls } from "./FileViewControls";
+import { createFileListing } from "./fileListing.mjs";
 import { PermanentDeletionDialog } from "./PermanentDeletionDialog";
 import { ProviderSelector } from "./ProviderSelector";
 
@@ -21,6 +23,11 @@ export function ManageFilesApp() {
   const [providersLoading, setProvidersLoading] = useState(true);
   const [selectedProviderKey, setSelectedProviderKey] = useState("box");
   const [selectedFileKey, setSelectedFileKey] = useState();
+  const [fileView, setFileView] = useState({
+    filter: "all",
+    query: "",
+    sort: "name-asc"
+  });
   const [folderReference, setFolderReference] = useState({});
   const [navigation, setNavigation] = useState({
     breadcrumbs: []
@@ -52,6 +59,12 @@ export function ManageFilesApp() {
   const selectedFile = files.find(
     (file) => createFileKey(file) === selectedFileKey
   );
+  const visibleFiles = useMemo(
+    () => createFileListing(files, fileView),
+    [files, fileView]
+  );
+  const fileViewFiltersActive =
+    Boolean(fileView.query) || fileView.filter !== "all";
 
   useEffect(() => {
     let active = true;
@@ -184,6 +197,10 @@ export function ManageFilesApp() {
     setFileAction({ status: "idle" });
     setPurgeDialog({ open: false });
     setSelectedFileKey(undefined);
+    setFileView((current) => ({
+      ...current,
+      query: ""
+    }));
     setRefreshRequest((current) => ({
       ...current,
       background: false
@@ -212,6 +229,10 @@ export function ManageFilesApp() {
     setFiles([]);
     setFileAction({ status: "idle" });
     setSelectedFileKey(undefined);
+    setFileView((current) => ({
+      ...current,
+      query: ""
+    }));
     setFolderReference({
       id: folder.id,
       path: folder.path
@@ -359,6 +380,13 @@ export function ManageFilesApp() {
   const workingFileKey = actionInProgress
     ? fileAction.fileKey
     : undefined;
+  const updateFileView = (changes) => {
+    setSelectedFileKey(undefined);
+    setFileView((current) => ({
+      ...current,
+      ...changes
+    }));
+  };
 
   return (
     <AppShell activePage="files">
@@ -448,33 +476,62 @@ export function ManageFilesApp() {
           </header>
 
           {navigation.breadcrumbs.length > 0 && (
-            <nav className="folder-breadcrumbs" aria-label="Folder path">
-              {navigation.breadcrumbs.map((breadcrumb, index) => (
-                <span
-                  key={`${breadcrumb.id || breadcrumb.path}:${index}`}
-                >
-                  {index > 0 && (
-                    <Icon name="chevron" size={13} />
-                  )}
-                  <button
-                    aria-current={
-                      index === navigation.breadcrumbs.length - 1
-                        ? "page"
-                        : undefined
-                    }
-                    disabled={
-                      actionInProgress ||
-                      index === navigation.breadcrumbs.length - 1
-                    }
-                    onClick={() => openFolder(breadcrumb)}
-                    type="button"
+            <div className="folder-toolbar">
+              <nav
+                className="folder-breadcrumbs"
+                aria-label="Folder path"
+              >
+                {navigation.breadcrumbs.map((breadcrumb, index) => (
+                  <span
+                    key={`${breadcrumb.id || breadcrumb.path}:${index}`}
                   >
-                    {index === 0 && <Icon name="folder" size={14} />}
-                    {breadcrumb.name}
-                  </button>
-                </span>
-              ))}
-            </nav>
+                    {index > 0 && (
+                      <Icon name="chevron" size={13} />
+                    )}
+                    <button
+                      aria-current={
+                        index === navigation.breadcrumbs.length - 1
+                          ? "page"
+                          : undefined
+                      }
+                      disabled={
+                        actionInProgress ||
+                        index === navigation.breadcrumbs.length - 1
+                      }
+                      onClick={() => openFolder(breadcrumb)}
+                      type="button"
+                    >
+                      {index === 0 && (
+                        <Icon name="folder" size={14} />
+                      )}
+                      {breadcrumb.name}
+                    </button>
+                  </span>
+                ))}
+              </nav>
+              <FileViewControls
+                disabled={
+                  listing.loading || actionInProgress
+                }
+                files={files}
+                filter={fileView.filter}
+                onFilterChange={(filter) =>
+                  updateFileView({ filter })
+                }
+                onReset={() =>
+                  updateFileView({
+                    filter: "all",
+                    query: "",
+                    sort: "name-asc"
+                  })
+                }
+                onSearch={(query) => updateFileView({ query })}
+                onSortChange={(sort) => updateFileView({ sort })}
+                query={fileView.query}
+                resultCount={visibleFiles.length}
+                sort={fileView.sort}
+              />
+            </div>
           )}
 
           {fileAction.status !== "idle" && (
@@ -516,7 +573,15 @@ export function ManageFilesApp() {
           ) : listing.error && files.length === 0 ? null : (
             <FileList
               canDelete={canDelete}
-              files={files}
+              emptyDescription={
+                fileViewFiltersActive
+                  ? "Try a different search term or file type."
+                  : undefined
+              }
+              emptyTitle={
+                fileViewFiltersActive ? "No matching items" : undefined
+              }
+              files={visibleFiles}
               onDelete={deleteFile}
               onDownload={downloadFile}
               onOpenFolder={openFolder}

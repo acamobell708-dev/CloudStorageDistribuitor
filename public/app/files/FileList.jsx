@@ -44,6 +44,8 @@ function handleRowKeyDown(event, file, onSelect) {
 
 export function FileList({
   canDelete,
+  emptyDescription,
+  emptyTitle,
   files,
   onDelete,
   onDownload,
@@ -59,10 +61,11 @@ export function FileList({
         <span className="files-empty-icon">
           <Icon name="folder" size={25} />
         </span>
-        <h2>This folder is empty</h2>
+        <h2>{emptyTitle || "This folder is empty"}</h2>
         <p>
-          The current {providerName} folder does not contain any files or
-          subfolders.
+          {emptyDescription ||
+            `The current ${providerName} folder does not contain any ` +
+              "files or subfolders."}
         </p>
       </div>
     );
