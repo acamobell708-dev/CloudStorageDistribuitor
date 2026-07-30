@@ -7,13 +7,30 @@ class FileDeletionService {
 
   async delete(providerKey, fileReference = {}) {
     const id = String(fileReference.id || "").trim();
+    const itemType =
+      fileReference.type === "folder" ? "folder" : "file";
 
     if (!id) {
-      throw new ValidationError("A cloud file ID is required");
+      throw new ValidationError(`A cloud ${itemType} ID is required`);
     }
 
     const provider = this.providerFactory.get(providerKey);
-    const file = await provider.deleteCloudFile({
+    const deleteItem =
+      itemType === "folder"
+        ? provider.deleteCloudFolder?.bind(provider)
+        : provider.deleteCloudFile.bind(provider);
+
+    if (!deleteItem) {
+      throw new ValidationError(
+        `${provider.displayName} does not support folder deletion`,
+        {
+          code: "UNSUPPORTED_FILE_ACTION",
+          statusCode: 405
+        }
+      );
+    }
+
+    const file = await deleteItem({
       id,
       path:
         typeof fileReference.path === "string"
@@ -23,14 +40,16 @@ class FileDeletionService {
 
     if (!file?.removed) {
       throw new Error(
-        `${provider.displayName} did not confirm the file deletion`
+        `${provider.displayName} did not confirm the ${itemType} deletion`
       );
     }
 
     return {
       deletedAt: new Date().toISOString(),
       file,
-      message: `${file.filename || "Item"} was deleted from ${provider.displayName}`,
+      message:
+        `${file.filename || file.name || "Item"} was deleted from ` +
+        provider.displayName,
       provider: {
         displayName: provider.displayName,
         key: provider.key

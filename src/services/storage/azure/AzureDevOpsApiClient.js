@@ -352,15 +352,21 @@ class AzureDevOpsApiClient {
   }
 
   async createFileDeletePush({ comment, oldObjectId, path: filePath }) {
+    return this.createFilesDeletePush({
+      comment,
+      oldObjectId,
+      paths: [filePath]
+    });
+  }
+
+  async createFilesDeletePush({ comment, oldObjectId, paths }) {
     return this.createPush({
-      changes: [
-        {
-          changeType: "delete",
-          item: {
-            path: filePath
-          }
+      changes: paths.map((filePath) => ({
+        changeType: "delete",
+        item: {
+          path: filePath
         }
-      ],
+      })),
       comment,
       oldObjectId
     });

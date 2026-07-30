@@ -193,7 +193,7 @@ class BoxStorageProvider extends StorageProvider {
     }
 
     const query = new URLSearchParams({
-      fields: "id,type,name,modified_at,parent,path_collection"
+      fields: "id,type,name,etag,modified_at,parent,path_collection"
     });
 
     return this.apiClient.requestJson(
@@ -831,6 +831,56 @@ class BoxStorageProvider extends StorageProvider {
 
   async deleteCloudFile(fileReference) {
     return this.deleteFile(fileReference?.id);
+  }
+
+  async deleteFolder(folderId) {
+    this.requireConfiguration();
+
+    const normalizedFolderId = String(folderId || "").trim();
+
+    if (!normalizedFolderId) {
+      throw new ValidationError("A Box folder ID is required");
+    }
+
+    if (normalizedFolderId === String(this.folderId)) {
+      throw new ValidationError(
+        "The configured Box root folder cannot be deleted"
+      );
+    }
+
+    const folder = await this.getFolderInfo(normalizedFolderId);
+    this.requireItemInConfiguredFolder(folder);
+    const query = new URLSearchParams({
+      recursive: "true"
+    });
+
+    await this.apiClient.request(
+      `${this.apiClient.apiUrl}/folders/` +
+        `${encodeURIComponent(normalizedFolderId)}?${query}`,
+      {
+        action: `Deleting Box folder ${normalizedFolderId}`,
+        ...(folder.etag
+          ? {
+              headers: {
+                "If-Match": folder.etag
+              }
+            }
+          : {}),
+        method: "DELETE"
+      }
+    );
+
+    return {
+      filename: folder.name,
+      id: folder.id,
+      provider: this.key,
+      removed: true,
+      type: "folder"
+    };
+  }
+
+  async deleteCloudFolder(folderReference) {
+    return this.deleteFolder(folderReference?.id);
   }
 
   async deleteFiles(fileIds) {

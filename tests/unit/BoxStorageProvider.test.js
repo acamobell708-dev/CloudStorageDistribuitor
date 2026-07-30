@@ -349,6 +349,59 @@ test("deletes only a file from the configured Box folder", async () => {
   assert.match(apiClient.calls[1].url, /files\/file-1$/);
 });
 
+test("recursively deletes a nested Box folder but protects the root", async () => {
+  const apiClient = createApiClient([
+    {
+      etag: "folder-etag",
+      id: "project-folder",
+      name: "Project",
+      parent: {
+        id: "123"
+      },
+      path_collection: {
+        entries: [
+          {
+            id: "123",
+            name: "Storage"
+          }
+        ]
+      },
+      type: "folder"
+    }
+  ]);
+  apiClient.request = async (url, options) => {
+    apiClient.calls.push({ options, url });
+    return new Response(undefined, { status: 204 });
+  };
+  const provider = new BoxStorageProvider({
+    accountMaximumUploadSizeBytes: 1024,
+    apiClient,
+    folderId: "123"
+  });
+
+  const result = await provider.deleteCloudFolder({
+    id: "project-folder"
+  });
+
+  assert.equal(result.filename, "Project");
+  assert.equal(result.type, "folder");
+  assert.equal(result.removed, true);
+  assert.equal(apiClient.calls[1].options.method, "DELETE");
+  assert.equal(
+    apiClient.calls[1].options.headers["If-Match"],
+    "folder-etag"
+  );
+  assert.match(
+    apiClient.calls[1].url,
+    /folders\/project-folder\?recursive=true/
+  );
+
+  await assert.rejects(
+    provider.deleteCloudFolder({ id: "123" }),
+    /root folder cannot be deleted/
+  );
+});
+
 test("refuses to delete a Box file outside the configured folder", async () => {
   const apiClient = createApiClient([
     {

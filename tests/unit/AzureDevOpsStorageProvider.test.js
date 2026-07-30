@@ -269,6 +269,82 @@ test("deletes a current Azure file with a versioned Git commit", async () => {
   });
 });
 
+test("deletes every file in a managed Azure folder with one commit", async () => {
+  let deletePush;
+  const apiClient = {
+    createFilesDeletePush: async (details) => {
+      deletePush = details;
+      return {
+        commits: [
+          {
+            commitId: "folder-deletion-commit"
+          }
+        ]
+      };
+    },
+    getBranchReference: async () => ({
+      name: "refs/heads/main",
+      objectId: "current-commit"
+    }),
+    isConfigured: () => true,
+    listRepositoryItems: async () => [
+      {
+        gitObjectType: "tree",
+        isFolder: true,
+        objectId: "folder-tree",
+        path: "/folders/Project"
+      },
+      {
+        gitObjectType: "blob",
+        isFolder: false,
+        objectId: "file-one",
+        path: "/folders/Project/one.txt"
+      },
+      {
+        gitObjectType: "blob",
+        isFolder: false,
+        objectId: "file-two",
+        path: "/folders/Project/Nested/two.txt"
+      },
+      {
+        gitObjectType: "blob",
+        isFolder: false,
+        objectId: "unrelated",
+        path: "/documents/keep.txt"
+      }
+    ]
+  };
+  const provider = createProvider({
+    apiClient,
+    localDataRepositoryEnabled: false
+  });
+
+  const result = await provider.deleteCloudFolder({
+    id: "folder-tree",
+    path: "/folders/Project"
+  });
+
+  assert.equal(result.removed, true);
+  assert.equal(result.removedFileCount, 2);
+  assert.equal(result.retainedInHistory, true);
+  assert.deepEqual(deletePush, {
+    comment: "Delete folder Project (2 files)",
+    oldObjectId: "current-commit",
+    paths: [
+      "/folders/Project/one.txt",
+      "/folders/Project/Nested/two.txt"
+    ]
+  });
+
+  await assert.rejects(
+    provider.deleteCloudFolder({
+      id: "/",
+      path: "/"
+    }),
+    /managed Azure storage paths/
+  );
+});
+
 test("permanently deletes only a verified current Azure file", async () => {
   let purgeReference;
   const objectId = "b".repeat(40);

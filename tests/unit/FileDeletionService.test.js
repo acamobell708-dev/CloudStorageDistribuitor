@@ -42,6 +42,42 @@ test("deletes a cloud file through the selected provider", async () => {
   assert.match(result.deletedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
+test("routes folder deletion through the provider folder contract", async () => {
+  let receivedReference;
+  const provider = {
+    deleteCloudFile: async () => {
+      throw new Error("The file deletion path should not be used");
+    },
+    deleteCloudFolder: async (folderReference) => {
+      receivedReference = folderReference;
+      return {
+        filename: "Project",
+        id: folderReference.id,
+        removed: true,
+        type: "folder"
+      };
+    },
+    displayName: "Test Cloud",
+    key: "test"
+  };
+  const service = new FileDeletionService({
+    get: () => provider
+  });
+
+  const result = await service.delete("test", {
+    id: "folder-1",
+    path: "/Project",
+    type: "folder"
+  });
+
+  assert.deepEqual(receivedReference, {
+    id: "folder-1",
+    path: "/Project"
+  });
+  assert.equal(result.file.type, "folder");
+  assert.equal(result.message, "Project was deleted from Test Cloud");
+});
+
 test("rejects missing IDs and unconfirmed cloud deletions", async () => {
   const service = new FileDeletionService({
     get: () => ({

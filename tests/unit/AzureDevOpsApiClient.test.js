@@ -310,3 +310,55 @@ test("creates an Azure Git deletion commit without file content", async () => {
     "previous-commit"
   );
 });
+
+test("creates one Azure Git push for multiple file deletions", async () => {
+  const calls = [];
+  const client = new AzureDevOpsApiClient({
+    branch: "main",
+    fetch: async (url, options) => {
+      calls.push({ options, url });
+      return Response.json(
+        {
+          commits: [
+            {
+              commitId: "folder-deletion-commit"
+            }
+          ]
+        },
+        { status: 201 }
+      );
+    },
+    pat: "secret-pat",
+    remote:
+      "https://organization@dev.azure.com/organization/project/_git/media"
+  });
+
+  await client.createFilesDeletePush({
+    comment: "Delete Project",
+    oldObjectId: "previous-commit",
+    paths: [
+      "/folders/Project/one.txt",
+      "/folders/Project/Nested/two.txt"
+    ]
+  });
+
+  const body = JSON.parse(calls[0].options.body);
+
+  assert.deepEqual(
+    body.commits[0].changes.map((change) => ({
+      changeType: change.changeType,
+      path: change.item.path
+    })),
+    [
+      {
+        changeType: "delete",
+        path: "/folders/Project/one.txt"
+      },
+      {
+        changeType: "delete",
+        path: "/folders/Project/Nested/two.txt"
+      }
+    ]
+  );
+  assert.equal(calls.length, 1);
+});

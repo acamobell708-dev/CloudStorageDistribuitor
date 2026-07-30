@@ -10,7 +10,8 @@ repository from one browser interface. Cloud credentials remain on the server.
 - Original stored filenames with internal content hashes and duplicate detection.
 - Direct and chunked Box uploads.
 - Versioned Azure uploads sent directly to the remote repository API.
-- Live Box and Azure file management with streamed downloads and deletion.
+- Live Box and Azure folder browsing with streamed downloads and recursive
+  file or folder deletion.
 - Owner-authorized Azure history purge for exceptional permanent deletion.
 - Predefined member accounts, in-memory sessions, and read-only guest access.
 - Shared provider base class and factory for adding future storage services.

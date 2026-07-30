@@ -231,12 +231,13 @@ export function ManageFilesApp() {
 
   const deleteFile = async (file) => {
     const fileKey = createFileKey(file);
+    const isFolder = file.type === "folder";
 
     setFileAction({
       detail: file.name,
       fileKey,
       status: "deleting",
-      title: "Deleting item…"
+      title: isFolder ? "Deleting folder…" : "Deleting item…"
     });
 
     try {
@@ -256,9 +257,12 @@ export function ManageFilesApp() {
           `${result.provider.displayName}.` +
           (result.file.retainedInHistory
             ? " Its earlier Git versions remain in history."
+            : "") +
+          (Number.isFinite(result.file.removedFileCount)
+            ? ` ${result.file.removedFileCount} files were removed.`
             : ""),
         status: "success",
-        title: "Item deleted"
+        title: isFolder ? "Folder deleted" : "Item deleted"
       });
       refreshFiles(true);
     } catch (error) {
@@ -368,7 +372,7 @@ export function ManageFilesApp() {
             <h1>Manage files</h1>
             <p>
               Choose a provider to read the latest contents directly from its
-              cloud service. Select a row to manage that file while credentials
+              cloud service. Select a row to manage that item while credentials
               and access tokens remain on the server.
             </p>
           </div>
@@ -413,6 +417,7 @@ export function ManageFilesApp() {
             </div>
             <div className="files-card-heading-actions">
               {selectedFile &&
+                selectedFile.type !== "folder" &&
                 selectedProviderKey === "azure" &&
                 canPermanentlyDelete && (
                   <button

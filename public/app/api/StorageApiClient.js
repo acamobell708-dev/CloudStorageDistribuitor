@@ -75,6 +75,10 @@ export class StorageApiClient {
       query.set("path", file.path);
     }
 
+    if (file?.type) {
+      query.set("type", file.type);
+    }
+
     const queryString = query.toString();
 
     return (

@@ -138,6 +138,13 @@ const mediaDirectories = {
   source: "source",
   video: "media/video"
 };
+const managedDirectoryRoots = [
+  "documents",
+  "folders",
+  "images",
+  "media",
+  "source"
+];
 
 const documentMimeTypes = new Set([
   "application/json",
@@ -683,6 +690,126 @@ class AzureDevOpsStorageProvider extends StorageProvider {
   deleteCloudFile(fileReference) {
     return this.enqueueOperation(() =>
       this.deleteFileDirectly(fileReference)
+    );
+  }
+
+  normalizeManagedFolderPath(folderPath) {
+    const normalizedPath = this.normalizeFolderPath(folderPath);
+    const relativePath = normalizedPath.replace(/^\/+/, "");
+
+    if (
+      normalizedPath === "/" ||
+      !managedDirectoryRoots.some(
+        (root) =>
+          relativePath === root ||
+          relativePath.startsWith(`${root}/`)
+      )
+    ) {
+      throw new ValidationError(
+        "Folder deletion is limited to managed Azure storage paths"
+      );
+    }
+
+    return normalizedPath;
+  }
+
+  async findCurrentCloudFolder(fileReference, items) {
+    const folderId = String(fileReference?.id || "").trim();
+    const folderPath = this.normalizeManagedFolderPath(
+      fileReference?.path
+    );
+
+    if (!folderId) {
+      throw new ValidationError(
+        "An Azure folder ID and repository path are required"
+      );
+    }
+
+    const repositoryItems =
+      items || (await this.apiClient.listRepositoryItems());
+    const folder = repositoryItems.find(
+      (candidate) =>
+        candidate.isFolder &&
+        candidate.path === folderPath &&
+        [candidate.objectId, candidate.path].includes(folderId)
+    );
+    const files = repositoryItems.filter(
+      (candidate) =>
+        !candidate.isFolder &&
+        String(candidate.gitObjectType || "").toLowerCase() === "blob" &&
+        candidate.path.startsWith(`${folderPath}/`)
+    );
+
+    if (!folder || files.length === 0) {
+      throw new ValidationError(
+        "The Azure folder is no longer present on the configured branch",
+        {
+          code: "FOLDER_NOT_FOUND",
+          statusCode: 404
+        }
+      );
+    }
+
+    return {
+      files,
+      folder,
+      path: folderPath
+    };
+  }
+
+  async deleteFolderDirectly(folderReference) {
+    this.requirePushConfiguration();
+
+    const branchReference = await this.apiClient.getBranchReference();
+
+    if (!branchReference?.objectId) {
+      throw new ValidationError(
+        `The configured Azure branch ${this.branch} was not found`,
+        {
+          code: "BRANCH_NOT_FOUND",
+          statusCode: 404
+        }
+      );
+    }
+
+    const items = await this.apiClient.listRepositoryItems();
+    const currentFolder = await this.findCurrentCloudFolder(
+      folderReference,
+      items
+    );
+    const push = await this.apiClient.createFilesDeletePush({
+      comment:
+        `Delete folder ${path.posix.basename(currentFolder.path)} ` +
+        `(${currentFolder.files.length} files)`,
+      oldObjectId: branchReference.objectId,
+      paths: currentFolder.files.map((file) => file.path)
+    });
+    const commit =
+      push?.commits?.[0]?.commitId ||
+      push?.refUpdates?.[0]?.newObjectId;
+
+    if (!commit) {
+      throw new Error(
+        "Azure DevOps did not return the folder deletion commit"
+      );
+    }
+
+    return {
+      commit,
+      filename: path.posix.basename(currentFolder.path),
+      id: currentFolder.folder.objectId,
+      path: currentFolder.path,
+      provider: this.key,
+      removed: true,
+      removedFileCount: currentFolder.files.length,
+      retainedInHistory: true,
+      type: "folder"
+    };
+  }
+
+  deleteCloudFolder(folderReference) {
+    return this.enqueueOperation(() =>
+      this.deleteFolderDirectly(folderReference)
     );
   }
 

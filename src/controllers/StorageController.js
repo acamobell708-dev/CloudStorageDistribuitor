@@ -54,7 +54,8 @@ class StorageController {
           request.params.provider,
           {
             id: request.params.fileId,
-            path: request.query.path
+            path: request.query.path,
+            type: request.query.type
           }
         )
       );

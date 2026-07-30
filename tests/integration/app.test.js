@@ -71,6 +71,19 @@ function createTestApplication(overrides = {}) {
         removed: true
       };
     },
+    deleteCloudFolder: async (folderReference) => {
+      overrides.onDeleteFolder?.(key, folderReference);
+
+      return {
+        filename: `${key}-folder`,
+        id: folderReference.id,
+        provider: key,
+        removed: true,
+        removedFileCount: key === "azure" ? 2 : undefined,
+        retainedInHistory: key === "azure",
+        type: "folder"
+      };
+    },
     downloadCloudFile: async (fileReference) => {
       const body = Buffer.from(`${key}-download`);
 
@@ -552,6 +565,39 @@ test("deletes a selected Box file through the shared storage route", async () =>
     assert.deepEqual(deletedReference, {
       id: "box-file-1",
       path: "/box-file.txt"
+    });
+  });
+});
+
+test("deletes a selected folder through the shared storage route", async () => {
+  let deletedReference;
+  const app = createTestApplication({
+    onDeleteFolder: (providerKey, folderReference) => {
+      assert.equal(providerKey, "azure");
+      deletedReference = folderReference;
+    }
+  });
+
+  await withAuthenticatedServer(app, async (baseUrl, authenticatedFetch) => {
+    const response = await authenticatedFetch(
+      `${baseUrl}/api/storage/azure/files/folder-tree?` +
+        new URLSearchParams({
+          path: "/folders/Project",
+          type: "folder"
+        }),
+      {
+        method: "DELETE"
+      }
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.file.removed, true);
+    assert.equal(body.file.type, "folder");
+    assert.equal(body.file.removedFileCount, 2);
+    assert.deepEqual(deletedReference, {
+      id: "folder-tree",
+      path: "/folders/Project"
     });
   });
 });

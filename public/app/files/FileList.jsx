@@ -30,7 +30,7 @@ export function createFileKey(file) {
   return JSON.stringify([file.provider, file.id, file.path]);
 }
 
-function handleRowKeyDown(event, file, onOpenFolder, onSelect) {
+function handleRowKeyDown(event, file, onSelect) {
   if (
     event.target !== event.currentTarget ||
     !["Enter", " "].includes(event.key)
@@ -39,11 +39,7 @@ function handleRowKeyDown(event, file, onOpenFolder, onSelect) {
   }
 
   event.preventDefault();
-  if (file.type === "folder") {
-    onOpenFolder(file);
-  } else {
-    onSelect(file);
-  }
+  onSelect(file);
 }
 
 export function FileList({
@@ -74,7 +70,7 @@ export function FileList({
 
   return (
     <div className="file-table-wrap">
-      <table className="file-table" aria-label={`${providerName} files`}>
+      <table className="file-table" aria-label={`${providerName} items`}>
         <thead>
           <tr>
             <th scope="col">File</th>
@@ -99,21 +95,16 @@ export function FileList({
                   `${isFolder ? " is-folder" : ""}`
                 }
                 key={fileKey}
-                onClick={() =>
-                  isFolder ? onOpenFolder(file) : onSelect(file)
-                }
+                onClick={() => onSelect(file)}
                 onKeyDown={(event) =>
-                  handleRowKeyDown(
-                    event,
-                    file,
-                    onOpenFolder,
-                    onSelect
-                  )
+                  handleRowKeyDown(event, file, onSelect)
                 }
                 tabIndex="0"
                 title={
                   isFolder
-                    ? `Open ${file.name}`
+                    ? selected
+                      ? `Manage folder ${file.name}`
+                      : `Select folder ${file.name}`
                     : selected
                     ? `Manage ${file.name}`
                     : `Select ${file.name}`
@@ -129,26 +120,37 @@ export function FileList({
                   <span className="listed-file-name">
                     {file.name}
                   </span>
-                  {isFolder && (
+                  {isFolder && !selected && (
                     <span className="folder-open-hint">
-                      Open
+                      Select
                       <Icon name="chevron" size={13} />
                     </span>
                   )}
-                  {selected && !isFolder && (
+                  {selected && (
                     <span className="file-row-actions">
                       <button
-                        aria-label={`Download ${file.name}`}
+                        aria-label={
+                          isFolder
+                            ? `Open ${file.name}`
+                            : `Download ${file.name}`
+                        }
                         className="file-action-button file-download-button"
                         disabled={working}
                         onClick={(event) => {
                           event.stopPropagation();
-                          onDownload(file);
+                          if (isFolder) {
+                            onOpenFolder(file);
+                          } else {
+                            onDownload(file);
+                          }
                         }}
                         type="button"
                       >
-                        <Icon name="download" size={16} />
-                        Download File
+                        <Icon
+                          name={isFolder ? "folder" : "download"}
+                          size={16}
+                        />
+                        {isFolder ? "Open folder" : "Download file"}
                       </button>
                       {canDelete && (
                         <button
@@ -162,7 +164,7 @@ export function FileList({
                           type="button"
                         >
                           <Icon name="trash" size={15} />
-                          Delete item
+                          {isFolder ? "Delete folder" : "Delete item"}
                         </button>
                       )}
                     </span>
