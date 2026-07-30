@@ -53,6 +53,10 @@ function createTestApplication(overrides = {}) {
       listingConfigured: true,
       maximumUploadSizeBytes:
         overrides.maximumUploadSizeBytes || 1024,
+      storageCapacityBytes: 1000,
+      storageCapacitySource:
+        key === "box" ? "provider-account" : "repository-limit",
+      storageUsedBytes: key === "box" ? 250 : undefined,
       supportedFileActions:
         key === "box"
           ? ["download", "delete"]
@@ -423,6 +427,8 @@ test("reports API health and configured storage providers", async () => {
     assert.equal(health.status, "ok");
     assert.equal(providers.providers[0].key, "box");
     assert.equal(providers.providers[0].configured, true);
+    assert.equal(providers.providers[0].storageCapacityBytes, 1000);
+    assert.equal(providers.providers[0].storageUsedBytes, 250);
     assert.deepEqual(
       providers.providers[0].supportedFileActions,
       ["download", "delete"]

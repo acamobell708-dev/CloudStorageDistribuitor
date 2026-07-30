@@ -37,14 +37,17 @@ test("summarizes provider totals and media composition", async () => {
   const { createStorageInsights } = await loadInsightsModule();
   const insights = createStorageInsights([
     {
+      capacityBytes: 1000,
       files: [
         { name: "cover.jpg", path: "/cover.jpg", size: 300 },
         { name: "notes.txt", path: "/notes.txt", size: 100 }
       ],
       key: "box",
+      reportedUsedBytes: 650,
       status: "loaded"
     },
     {
+      capacityBytes: 1000,
       files: [
         {
           contentType: "audio/mpeg",
@@ -70,6 +73,15 @@ test("summarizes provider totals and media composition", async () => {
   const audio = insights.mediaSegments.find(
     (segment) => segment.key === "audio"
   );
+  const boxCapacity = insights.providerCapacity.find(
+    (segment) => segment.key === "box"
+  );
+  const otherAccountUsage = boxCapacity.segments.find(
+    (segment) => segment.key === "account-usage"
+  );
+  const boxAvailable = boxCapacity.segments.find(
+    (segment) => segment.key === "remaining"
+  );
 
   assert.equal(insights.totalBytes, 1000);
   assert.equal(insights.totalFiles, 4);
@@ -78,6 +90,10 @@ test("summarizes provider totals and media composition", async () => {
   assert.equal(azure.value, 600);
   assert.equal(audio.value, 600);
   assert.equal(audio.items[0].providerLabel, "Azure");
+  assert.equal(boxCapacity.usedBytes, 650);
+  assert.equal(boxCapacity.utilizationPercent, 65);
+  assert.equal(otherAccountUsage.value, 250);
+  assert.equal(boxAvailable.value, 350);
 });
 
 test("keeps unavailable providers visible without inventing usage", async () => {

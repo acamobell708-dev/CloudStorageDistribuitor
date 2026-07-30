@@ -87,7 +87,15 @@ const environment = Object.freeze({
     purgePat:
       process.env.AZURE_PURGE_PAT || process.env.AZURE_DEVOPS_PAT,
     remote: process.env.AZURE_GIT_REMOTE,
-    shouldPush: process.env.AZURE_GIT_PUSH === "true"
+    shouldPush: process.env.AZURE_GIT_PUSH === "true",
+    storageCapacityBytes:
+      parseNumber("AZURE_STORAGE_CAPACITY_GB", 250, {
+        maximum: 250,
+        minimum: 1
+      }) *
+      1024 *
+      1024 *
+      1024
   }),
   azureCli: Object.freeze({
     dataRepoRoot: path.resolve(

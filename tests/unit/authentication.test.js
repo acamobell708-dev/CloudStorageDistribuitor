@@ -71,6 +71,13 @@ test("redirects unauthenticated and guest page requests safely", () => {
       permissions: ["page:home", "page:dashboard"]
     }
   });
+  const guestCapacity = invokeMiddleware(middleware, {
+    method: "GET",
+    path: "/availableStorage.html",
+    user: {
+      permissions: ["page:home", "page:dashboard"]
+    }
+  });
   const guestDashboard = invokeMiddleware(middleware, {
     method: "GET",
     path: "/dashboard.html",
@@ -80,6 +87,7 @@ test("redirects unauthenticated and guest page requests safely", () => {
   });
 
   assert.equal(signedOut.redirectedTo, "/login.html");
+  assert.equal(guestCapacity.redirectedTo, "/?access=denied");
   assert.equal(guestManage.redirectedTo, "/?access=denied");
   assert.equal(guestDashboard.nextCalled, true);
 });

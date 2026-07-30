@@ -88,6 +88,7 @@ function createPageAccessMiddleware() {
   const pagePermissions = new Map([
     ["/", permissions.accessHome],
     ["/index.html", permissions.accessHome],
+    ["/availablestorage.html", permissions.listFiles],
     ["/dashboard.html", permissions.accessDashboard],
     ["/managefiles.html", permissions.listFiles]
   ]);

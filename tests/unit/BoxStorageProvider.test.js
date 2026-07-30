@@ -238,6 +238,37 @@ test("reads the authenticated Box account maximum upload size", async () => {
   assert.match(apiClient.calls[0].url, /users\/me/);
 });
 
+test("reads and caches authenticated Box capacity details", async () => {
+  const apiClient = createApiClient([
+    {
+      max_upload_size: 2 * 1024 * 1024 * 1024,
+      space_amount: 1000,
+      space_used: 650
+    }
+  ]);
+  const provider = new BoxStorageProvider({
+    apiClient,
+    folderId: "123"
+  });
+
+  const [maximumUploadSizeBytes, capacity] = await Promise.all([
+    provider.getMaximumUploadSizeBytes(),
+    provider.getStorageCapacity()
+  ]);
+
+  assert.equal(maximumUploadSizeBytes, 2 * 1024 * 1024 * 1024);
+  assert.deepEqual(capacity, {
+    capacityBytes: 1000,
+    source: "provider-account",
+    usedBytes: 650
+  });
+  assert.equal(apiClient.calls.length, 1);
+  assert.match(
+    apiClient.calls[0].url,
+    /max_upload_size,space_amount,space_used/
+  );
+});
+
 test("normalizes the current configured Box folder listing", async () => {
   const apiClient = createApiClient([
     {

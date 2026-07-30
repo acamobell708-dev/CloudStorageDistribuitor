@@ -13,6 +13,7 @@ repository from one browser interface. Cloud credentials remain on the server.
 - Live Box and Azure folder browsing with streamed downloads and recursive
   file or folder deletion.
 - Owner-authorized Azure history purge for exceptional permanent deletion.
+- Interactive provider-capacity bars grouped by file type.
 - Predefined member accounts, in-memory sessions, and read-only guest access.
 - Shared provider base class and factory for adding future storage services.
 
@@ -106,6 +107,7 @@ by the enterprise, and have read/write access to `BOX_FOLDER_ID`.
 AZURE_GIT_REMOTE=https://your-organization@dev.azure.com/your-organization/your-project/_git/your-repository
 AZURE_GIT_BRANCH=main
 AZURE_GIT_PUSH=true
+AZURE_STORAGE_CAPACITY_GB=250
 AZURE_AUTH_MODE=pat
 AZURE_DEVOPS_PAT=
 AZURE_MANAGED_IDENTITY_CLIENT_ID=
@@ -117,6 +119,12 @@ AZURE_PURGE_MANAGED_IDENTITY_CLIENT_ID=
 `AZURE_GIT_PUSH=true` enables browser writes. Web uploads go straight to the
 configured remote and do not use a local Git working tree, which keeps uploaded
 data out of the GitHub code repository.
+
+The Available Storage page reads Box quota and account usage directly from Box.
+Azure Repos does not expose an equivalent remaining-capacity field, so
+`AZURE_STORAGE_CAPACITY_GB` controls the comparison limit and defaults to 250
+GB. Azure file-type totals represent the configured branch's current files,
+not repository history or Git object overhead.
 
 For local development, keep both authorization modes as `pat`.
 `AZURE_PURGE_PAT` is optional and otherwise defaults to `AZURE_DEVOPS_PAT`.

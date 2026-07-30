@@ -32,11 +32,11 @@ const navigationSections = [
         requiredPermission: permissions.listFiles
       },
       {
-        disabled: true,
-        href: "#",
+        href: "/availableStorage.html",
         icon: "archive",
         key: "storage",
-        label: "Available storage"
+        label: "Available storage",
+        requiredPermission: permissions.listFiles
       }
     ]
   }

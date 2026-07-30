@@ -26,6 +26,10 @@ function getCacheControl(filePath) {
 
 test("requires deployed HTML to revalidate before reuse", () => {
   assert.equal(
+    getCacheControl(path.join("dist", "availableStorage.html")),
+    CLIENT_HTML_CACHE_CONTROL
+  );
+  assert.equal(
     getCacheControl(path.join("dist", "dashboard.html")),
     CLIENT_HTML_CACHE_CONTROL
   );

@@ -144,6 +144,12 @@ Add these environment variables:
 | `AZURE_GIT_REMOTE` | Azure Repos HTTPS URL without a PAT |
 | `AZURE_GIT_BRANCH` | `main` |
 
+The Available Storage page defaults its Azure comparison capacity to 250 GB.
+No hosted setting is required for that default. To display a smaller
+administrative limit, add `AZURE_STORAGE_CAPACITY_GB` (1-250) to the Container
+App's runtime environment variables; it is display metadata, not an Azure
+quota change.
+
 Do not create `AZURE_DEVOPS_PAT` or `AZURE_PURGE_PAT` GitHub secrets. The
 deployed application obtains short-lived Azure DevOps tokens from its managed
 identity.

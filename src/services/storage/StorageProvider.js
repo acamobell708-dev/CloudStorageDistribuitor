@@ -8,6 +8,8 @@ class StorageProvider {
     key,
     displayName,
     maximumUploadSizeBytes,
+    storageCapacityBytes,
+    storageCapacitySource = "configured-limit",
     supportedFileActions = ["download"]
   }) {
     if (new.target === StorageProvider) {
@@ -20,10 +22,18 @@ class StorageProvider {
     this.key = key;
     this.displayName = displayName;
     this.maximumUploadSizeBytes = maximumUploadSizeBytes;
+    this.storageCapacityBytes = storageCapacityBytes;
+    this.storageCapacitySource = storageCapacitySource;
     this.supportedFileActions = supportedFileActions;
   }
 
   async getStatus() {
+    const [maximumUploadSizeBytes, storageCapacity] =
+      await Promise.all([
+        this.getMaximumUploadSizeBytes(),
+        this.getStorageCapacity()
+      ]);
+
     return {
       acceptedFileTypes: this.acceptedFileTypes,
       configured: this.isConfigured(),
@@ -31,13 +41,23 @@ class StorageProvider {
       displayName: this.displayName,
       key: this.key,
       listingConfigured: this.isListingConfigured(),
-      maximumUploadSizeBytes: await this.getMaximumUploadSizeBytes(),
+      maximumUploadSizeBytes,
+      storageCapacityBytes: storageCapacity.capacityBytes,
+      storageCapacitySource: storageCapacity.source,
+      storageUsedBytes: storageCapacity.usedBytes,
       supportedFileActions: this.supportedFileActions
     };
   }
 
   async getMaximumUploadSizeBytes() {
     return this.maximumUploadSizeBytes;
+  }
+
+  async getStorageCapacity() {
+    return {
+      capacityBytes: this.storageCapacityBytes,
+      source: this.storageCapacitySource
+    };
   }
 
   isConfigured() {

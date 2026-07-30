@@ -269,6 +269,9 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       key: "azure",
       maximumUploadSizeBytes:
         options.maximumUploadSizeBytes || 100 * 1024 * 1024,
+      storageCapacityBytes:
+        options.storageCapacityBytes || 250 * 1024 * 1024 * 1024,
+      storageCapacitySource: "repository-limit",
       supportedFileActions: [
         "download",
         ...(deletionConfigured ? ["delete"] : []),

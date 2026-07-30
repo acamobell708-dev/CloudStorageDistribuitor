@@ -54,9 +54,12 @@ export function useStorageInsights(apiClient, enabled) {
 
             if (!provider || !listingConfigured) {
               return {
+                capacityBytes: provider?.storageCapacityBytes,
+                capacitySource: provider?.storageCapacitySource,
                 detail: provider?.connectionError,
                 files: [],
                 key: definition.key,
+                reportedUsedBytes: provider?.storageUsedBytes,
                 status: "not-configured"
               };
             }
@@ -70,8 +73,11 @@ export function useStorageInsights(apiClient, enabled) {
               );
 
               return {
+                capacityBytes: provider.storageCapacityBytes,
+                capacitySource: provider.storageCapacitySource,
                 files: listing.files || [],
                 key: definition.key,
+                reportedUsedBytes: provider.storageUsedBytes,
                 refreshedAt: listing.refreshedAt,
                 status: "loaded"
               };
@@ -81,9 +87,12 @@ export function useStorageInsights(apiClient, enabled) {
               }
 
               return {
+                capacityBytes: provider.storageCapacityBytes,
+                capacitySource: provider.storageCapacitySource,
                 detail: error.message,
                 files: [],
                 key: definition.key,
+                reportedUsedBytes: provider.storageUsedBytes,
                 status: "error"
               };
             }

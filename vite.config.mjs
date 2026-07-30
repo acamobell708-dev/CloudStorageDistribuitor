@@ -18,6 +18,12 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
+        availableStorage: fileURLToPath(
+          new URL(
+            "./public/availableStorage.html",
+            import.meta.url
+          )
+        ),
         dashboard: fileURLToPath(
           new URL("./public/dashboard.html", import.meta.url)
         ),

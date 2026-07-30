@@ -5,25 +5,11 @@ import { useAuthSession } from "../auth/AuthSessionProvider";
 import { AppShell } from "../components/AppShell";
 import { Icon } from "../components/Icon";
 import { StorageDonutChart } from "./StorageDonutChart";
-import { formatBytes } from "./storageInsights.mjs";
+import {
+  formatBytes,
+  formatRefreshTime
+} from "./storageInsights.mjs";
 import { useStorageInsights } from "./useStorageInsights";
-
-function formatRefreshTime(value) {
-  if (!value) {
-    return "Waiting for provider data";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Provider data refreshed";
-  }
-
-  return `Updated ${new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(date)}`;
-}
 
 export function DashboardApp() {
   const { hasPermission } = useAuthSession();

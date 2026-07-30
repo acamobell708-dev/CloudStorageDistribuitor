@@ -44,6 +44,8 @@ class BoxStorageProvider extends StorageProvider {
       });
     this.accountMaximumUploadSizeBytes =
       options.accountMaximumUploadSizeBytes;
+    this.accountStorageDetails = undefined;
+    this.accountStorageDetailsPromise = undefined;
   }
 
   isConfigured() {
@@ -71,9 +73,32 @@ class BoxStorageProvider extends StorageProvider {
       return this.accountMaximumUploadSizeBytes;
     }
 
+    const accountDetails = await this.getAccountStorageDetails();
+    return accountDetails.maximumUploadSizeBytes;
+  }
+
+  async getAccountStorageDetails() {
+    if (this.accountStorageDetails) {
+      return this.accountStorageDetails;
+    }
+
+    if (!this.accountStorageDetailsPromise) {
+      this.accountStorageDetailsPromise = this.loadAccountStorageDetails();
+    }
+
+    try {
+      return await this.accountStorageDetailsPromise;
+    } catch (error) {
+      this.accountStorageDetailsPromise = undefined;
+      throw error;
+    }
+  }
+
+  async loadAccountStorageDetails() {
     const user = await this.apiClient.requestJson(
-      `${this.apiClient.apiUrl}/users/me?fields=max_upload_size`,
-      { action: "Reading the Box account upload limit" }
+      `${this.apiClient.apiUrl}/users/me?fields=` +
+        "max_upload_size,space_amount,space_used",
+      { action: "Reading Box account storage details" }
     );
     const accountLimit = Number(user?.max_upload_size);
 
@@ -83,7 +108,35 @@ class BoxStorageProvider extends StorageProvider {
 
     this.accountMaximumUploadSizeBytes = accountLimit;
     this.maximumUploadSizeBytes = accountLimit;
-    return accountLimit;
+    this.accountStorageDetails = {
+      capacityBytes:
+        Number.isFinite(Number(user?.space_amount)) &&
+        Number(user.space_amount) > 0
+          ? Number(user.space_amount)
+          : undefined,
+      maximumUploadSizeBytes: accountLimit,
+      usedBytes:
+        Number.isFinite(Number(user?.space_used)) &&
+        Number(user.space_used) >= 0
+          ? Number(user.space_used)
+          : undefined
+    };
+
+    return this.accountStorageDetails;
+  }
+
+  async getStorageCapacity() {
+    if (!this.isConfigured()) {
+      return super.getStorageCapacity();
+    }
+
+    const accountDetails = await this.getAccountStorageDetails();
+
+    return {
+      capacityBytes: accountDetails.capacityBytes,
+      source: "provider-account",
+      usedBytes: accountDetails.usedBytes
+    };
   }
 
   async listFolderItems(folderId = this.folderId) {
