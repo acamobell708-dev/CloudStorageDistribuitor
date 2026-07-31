@@ -760,6 +760,26 @@
     filter 140ms ease;
 }
 
+.activity-series-line {
+  fill: none;
+  opacity: 0.45;
+  pointer-events: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.activity-series-line.activity-user-0 {
+  color: #2968e8;
+}
+
+.activity-series-line.activity-user-1 {
+  color: #19a4dc;
+}
+
+.activity-series-line.activity-user-2 {
+  color: #7656dc;
+}
+
 .activity-dot:hover,
 .activity-dot:focus {
   r: 8px;

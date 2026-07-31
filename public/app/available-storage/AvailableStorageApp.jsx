@@ -30,9 +30,9 @@ export function AvailableStorageApp() {
           <div>
             <span className="section-kicker">
               <span />
-              Capacity overview
+              Provider capacity overview
             </span>
-            <h1>Know what is using your space.</h1>
+            <h1>Whats taking up the space:</h1>
             <p>
               Compare provider capacity and explore the file types behind
               each stored byte.

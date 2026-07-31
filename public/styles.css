@@ -77,10 +77,24 @@ a {
 
 .brand-logo {
   display: block;
-  width: clamp(148px, 18vw, 172px);
-  height: 34px;
-  object-fit: cover;
-  object-position: center;
+  width: clamp(120px, 16vw, 146px);
+  height: auto;
+}
+
+.app-signature {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 13px 24px calc(18px + env(safe-area-inset-bottom));
+  color: #8d98aa;
+  font-size: 9px;
+  letter-spacing: 0.015em;
+}
+
+.app-signature strong {
+  color: #65738a;
+  font-weight: 700;
 }
 
 .topbar nav {
@@ -606,6 +620,16 @@ main {
   border-radius: 10px;
   color: #2766e6;
   background: #fbfcff;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.provider-select-control:hover {
+  border-color: #adc4f3;
+  box-shadow: 0 5px 12px rgba(49, 86, 151, 0.08);
+  transform: translateY(-1px);
 }
 
 .provider-select-control select {
@@ -677,6 +701,16 @@ main {
 .upload-mode-selector button:hover {
   border-color: #adc4f3;
   background: #f7faff;
+  transform: translateY(-1px);
+}
+
+.upload-mode-selector button:active:not(:disabled),
+.provider-card:active:not(:disabled),
+.provider-select-control:active,
+.send-button:active:not(:disabled),
+.secondary-button:active:not(:disabled),
+.icon-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 
 .upload-mode-selector button:focus-visible {
@@ -1152,6 +1186,17 @@ main {
   background: #fcfdff;
   cursor: pointer;
   text-align: left;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease,
+    background 150ms ease;
+}
+
+.provider-card:hover:not(:disabled) {
+  border-color: #bfd1f5;
+  box-shadow: 0 8px 18px rgba(42, 78, 142, 0.08);
+  transform: translateY(-1px);
 }
 
 .provider-card.is-selected {

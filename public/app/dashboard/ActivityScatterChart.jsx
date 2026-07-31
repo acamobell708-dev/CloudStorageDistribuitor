@@ -26,18 +26,46 @@ function formatTime(value) {
   }).format(new Date(value));
 }
 
+function formatLegendName(user) {
+  const matchedName = String(user?.displayName || "").match(
+    /\b(adam|andrew|wilson)\b/i
+  );
+
+  return matchedName
+    ? `${matchedName[1][0].toUpperCase()}${matchedName[1].slice(1).toLowerCase()}`
+    : user?.displayName || "Unknown user";
+}
+
+function formatProviderName(provider) {
+  if (provider?.key === "azure") {
+    return "Azure";
+  }
+
+  if (provider?.key === "box") {
+    return "Box";
+  }
+
+  return provider?.displayName || "Cloud storage";
+}
+
 export function ActivityScatterChart({ dailyUploads, loading }) {
   const [activeId, setActiveId] = useState();
   const model = useMemo(() => {
     const days = dailyUploads?.days || [];
-    const users = [];
-    const userIndex = new Map();
+    const series = [];
+    const seriesIndex = new Map();
 
     for (const day of days) {
       for (const point of day.points) {
-        if (!userIndex.has(point.user.id)) {
-          userIndex.set(point.user.id, users.length);
-          users.push(point.user);
+        const key = `${point.user.id}:${point.provider?.key || "unknown"}`;
+
+        if (!seriesIndex.has(key)) {
+          seriesIndex.set(key, series.length);
+          series.push({
+            ...point,
+            key,
+            label: `${formatLegendName(point.user)} · ${formatProviderName(point.provider)}`
+          });
         }
       }
     }
@@ -50,7 +78,8 @@ export function ActivityScatterChart({ dailyUploads, loading }) {
     const plotHeight = chart.height - chart.top - chart.bottom;
     const points = days.flatMap((day, dayIndex) =>
       day.points.map((point) => {
-        const colorIndex = userIndex.get(point.user.id) % 3;
+        const seriesKey = `${point.user.id}:${point.provider?.key || "unknown"}`;
+        const colorIndex = seriesIndex.get(seriesKey) % 3;
         const x =
           chart.left +
           (days.length <= 1
@@ -63,7 +92,8 @@ export function ActivityScatterChart({ dailyUploads, loading }) {
         return {
           ...point,
           colorIndex,
-          id: `${point.date}:${point.user.id}`,
+          id: `${point.date}:${seriesKey}`,
+          seriesKey,
           x,
           y
         };
@@ -73,7 +103,13 @@ export function ActivityScatterChart({ dailyUploads, loading }) {
       (left, right) => left - right
     );
 
-    return { days, maximum, plotHeight, points, ticks, users };
+    const lines = series.map((entry, index) => ({
+      colorIndex: index % 3,
+      key: entry.key,
+      points: points.filter((point) => point.seriesKey === entry.key)
+    }));
+
+    return { days, lines, maximum, plotHeight, points, series, ticks };
   }, [dailyUploads]);
   const activePoint = model.points.find((point) => point.id === activeId);
   const tooltipWidth = 225;
@@ -96,13 +132,13 @@ export function ActivityScatterChart({ dailyUploads, loading }) {
         <div>
           <span className="eyebrow">14-day activity</span>
           <h2>Uploads per day</h2>
-          <p>Each dot represents one user’s successful uploads that day.</p>
+          <p>Lines connect each user and provider’s successful uploads by day.</p>
         </div>
         <div className="activity-user-legend" aria-label="Chart users">
-          {model.users.map((user, index) => (
-            <span key={user.id}>
+          {model.series.map((entry, index) => (
+            <span key={entry.key}>
               <i className={`activity-user-${index % 3}`} />
-              {user.displayName}
+              {entry.label}
             </span>
           ))}
         </div>
@@ -122,7 +158,7 @@ export function ActivityScatterChart({ dailyUploads, loading }) {
         <div className="activity-chart-scroll">
           <div className="activity-chart-stage">
             <svg
-              aria-label="Successful uploads per user per day"
+              aria-label="Successful uploads per user and provider per day"
               className="activity-scatter-chart"
               onMouseLeave={() => setActiveId(undefined)}
               role="group"
@@ -167,6 +203,18 @@ export function ActivityScatterChart({ dailyUploads, loading }) {
                   </text>
                 );
               })}
+
+              {model.lines.map((line) =>
+                line.points.length > 1 ? (
+                  <polyline
+                    className={`activity-series-line activity-user-${line.colorIndex}`}
+                    key={line.key}
+                    points={line.points
+                      .map((point) => `${point.x},${point.y}`)
+                      .join(" ")}
+                  />
+                ) : null
+              )}
 
               {model.points.map((point) => (
                 <circle

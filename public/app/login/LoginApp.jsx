@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { AuthApiClient } from "../auth/AuthApiClient";
+import { AppSignature } from "../components/AppSignature";
 import { Icon } from "../components/Icon";
-import cloudDisLogo from "../../CloudDisLogo.png";
+import cloudDisLogo from "../../CSD_storage_box_vector.svg";
 
 export function LoginApp() {
   const apiClient = useMemo(() => new AuthApiClient(), []);
@@ -92,6 +93,8 @@ export function LoginApp() {
           alt="Cloud Storage Distributor"
         />
       </a>
+
+      <AppSignature />
 
       <section className="login-shell">
         <div className="member-login">

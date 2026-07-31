@@ -170,9 +170,11 @@ class ActivityLogService {
         continue;
       }
 
-      const point = userMap.get(event.user.id) || {
+      const pointKey = `${event.user.id}:${event.provider.key}`;
+      const point = userMap.get(pointKey) || {
         count: 0,
         date,
+        provider: event.provider,
         totalBytes: 0,
         uploads: [],
         user: event.user
@@ -186,7 +188,7 @@ class ActivityLogService {
         occurredAt: event.occurredAt,
         provider: event.provider
       });
-      userMap.set(event.user.id, point);
+      userMap.set(pointKey, point);
     }
 
     return {

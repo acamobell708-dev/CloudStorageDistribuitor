@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560" role="img" aria-labelledby="title desc">
+  <title id="title">CSD Storage Box Vector Logo</title>
+  <desc id="desc">A vector logo featuring an open storage box with a cloud and distribution nodes, followed by the CSD wordmark.</desc>
+  <defs>
+    <linearGradient id="lidGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f8cff"/>
+      <stop offset="1" stop-color="#5eb7ff"/>
+    </linearGradient>
+    <linearGradient id="boxGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1325c2"/>
+      <stop offset="1" stop-color="#5a2bd7"/>
+    </linearGradient>
+    <linearGradient id="frontGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#102fdb"/>
+      <stop offset="1" stop-color="#081c95"/>
+    </linearGradient>
+    <linearGradient id="wordBlue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#117dff"/>
+      <stop offset="1" stop-color="#1629c9"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#111a5c" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <g transform="translate(60 40)" filter="url(#shadow)">
+    <!-- box emblem -->
+    <g transform="translate(0 40)">
+      <!-- back box -->
+      <path d="M112 161L267 213L424 161L384 336L267 397L150 336Z" fill="url(#boxGrad)" stroke="#1924a2" stroke-width="4"/>
+      <!-- front face -->
+      <path d="M150 336L267 397L384 336L267 295Z" fill="url(#frontGrad)" stroke="#13239a" stroke-width="4"/>
+      <!-- left lid -->
+      <path d="M76 146L267 208L267 300L98 247Z" fill="url(#lidGrad)" stroke="#1271d6" stroke-width="4"/>
+      <!-- right lid -->
+      <path d="M458 146L267 208L267 300L436 247Z" fill="url(#lidGrad)" stroke="#1271d6" stroke-width="4"/>
+
+      <!-- cloud -->
+      <g transform="translate(118 24)">
+        <path d="M77 139c-33 0-56-22-56-50 0-25 18-45 44-48 9-33 36-54 71-54 35 0 63 18 76 47 5-1 10-2 16-2 33 0 59 22 59 50 0 31-26 57-59 57H77z" fill="#eef7ff" stroke="#b9d9f6" stroke-width="4"/>
+      </g>
+
+      <!-- node spine -->
+      <path d="M267 247V363" fill="none" stroke="#f3f7ff" stroke-width="18" stroke-linecap="round"/>
+      <path d="M267 304L187 349" fill="none" stroke="#4667da" stroke-width="9" stroke-linecap="round"/>
+      <path d="M267 304L348 349" fill="none" stroke="#4667da" stroke-width="9" stroke-linecap="round"/>
+      <circle cx="267" cy="247" r="24" fill="#f8fbff" stroke="#ffffff" stroke-width="4"/>
+      <circle cx="267" cy="363" r="26" fill="#f8fbff" stroke="#ffffff" stroke-width="4"/>
+      <circle cx="187" cy="349" r="20" fill="#4bb8ff" stroke="#86d4ff" stroke-width="4"/>
+      <circle cx="348" cy="349" r="20" fill="#8d5cff" stroke="#b79aff" stroke-width="4"/>
+      <circle cx="267" cy="363" r="12" fill="#ff7b2d"/>
+    </g>
+  </g>
+
+  <g transform="translate(560 125)">
+    <text x="0" y="180" font-family="Inter, Arial, Helvetica, sans-serif" font-size="220" font-weight="800" letter-spacing="-7" fill="url(#wordBlue)">CSD</text>
+    <text x="10" y="255" font-family="Inter, Arial, Helvetica, sans-serif" font-size="54" font-weight="500" fill="#28374F">Cloud Storage Distributor</text>
+  </g>
+</svg>

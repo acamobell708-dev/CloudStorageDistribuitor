@@ -39,12 +39,11 @@ export function DashboardApp() {
           <div>
             <span className="section-kicker">
               <span />
-              Usage overview
+              Storage usage overview
             </span>
-            <h1>See where your storage lives.</h1>
+            <h1>What makes up the cumulative storage</h1>
             <p>
-              A live view of your connected storage providers and the files
-              that make up their footprint.
+              A live view of the connected cloud storage providers and their makeup.
             </p>
           </div>
           {canListFiles && (

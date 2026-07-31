@@ -410,13 +410,12 @@ export function ManageFilesApp() {
           <div>
             <span className="section-kicker">
               <span />
-              Live cloud contents
+              Live cloud storage contents
             </span>
-            <h1>Manage files</h1>
+            <h1>Manage files and media</h1>
             <p>
-              Choose a provider to read the latest contents directly from its
-              cloud service. Select a row to manage that item while credentials
-              and access tokens remain on the server.
+              Choose a provider then wait to view all media items within. Simpily select a row to preview, download or delete and item.
+              Folder structures are preserved.
             </p>
           </div>
 

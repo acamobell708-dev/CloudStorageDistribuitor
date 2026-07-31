@@ -1,8 +1,9 @@
 import { Icon } from "./Icon";
+import { AppSignature } from "./AppSignature";
 import { permissions } from "../auth/permissions";
 import { useAuthSession } from "../auth/AuthSessionProvider";
 import { UserMenu } from "./UserMenu";
-import cloudDisLogo from "../../CloudDisLogo.png";
+import cloudDisLogo from "../../CSD_storage_box_vector.svg";
 
 const navigationSections = [
   {
@@ -162,6 +163,8 @@ export function AppShell({ activePage, children }) {
 
         {children}
       </div>
+
+      <AppSignature />
 
       <nav aria-label="Mobile navigation" className="mobile-navigation">
         {navigationSections.flatMap((section) =>

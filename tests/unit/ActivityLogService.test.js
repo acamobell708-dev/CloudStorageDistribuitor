@@ -75,6 +75,34 @@ test("aggregates uploads into one point per user and UTC day", () => {
   assert.equal(finalDay.points[0].uploads.length, 2);
 });
 
+test("keeps each provider as a separate upload chart series", () => {
+  const service = new ActivityLogService({
+    clock: { now: () => Date.parse("2026-07-31T18:00:00Z") }
+  });
+
+  service.record(createEvent());
+  service.record(
+    createEvent({
+      event: {
+        provider: { displayName: "Azure Repos", key: "azure" }
+      },
+      fileId: "azure-file"
+    })
+  );
+
+  const points = service.list({ days: 14 }).dailyUploads.days.at(-1).points;
+
+  assert.deepEqual(
+    points
+      .map((point) => [point.provider.key, point.count])
+      .sort((left, right) => left[0].localeCompare(right[0])),
+    [
+      ["azure", 1],
+      ["box", 1]
+    ]
+  );
+});
+
 test("returns no more than ten newest history items per page", () => {
   const service = new ActivityLogService({
     clock: { now: () => Date.parse("2026-07-31T18:00:00Z") }

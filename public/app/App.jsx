@@ -225,7 +225,7 @@ export default function App() {
               </h1>
               <p>
                 Send single, multiple or folders of media to Box or Azure Repos—without
-                exposing credentials, and safely managing these directly from the site.
+                exposing credentials, and safely manage these directly from the site.
               </p>
             </div>
             <div className="hero-stat">
