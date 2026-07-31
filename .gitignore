@@ -8,3 +8,6 @@ coverage/
 uploaded-images/
 .azure-data-repo/
 .box-downloads/
+
+# Local upload and media-preview fixtures (downloaded test assets)
+/preview-test/

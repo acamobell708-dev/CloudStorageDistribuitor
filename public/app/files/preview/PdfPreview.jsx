@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { filePreviewLimits } from "../../../../src/shared/filePreviewPolicy.mjs";
+import { disposePdfPreview } from "./pdfPreviewLifecycle.mjs";
 
 let pdfLibraryPromise;
 
@@ -77,9 +78,11 @@ export function PdfPreview({ name, url }) {
 
     return () => {
       active = false;
-      renderTaskReference.current?.cancel();
-      loadingTask?.destroy();
-      documentReference.current?.destroy();
+      void disposePdfPreview({
+        loadingTask,
+        renderTask: renderTaskReference.current
+      });
+      renderTaskReference.current = undefined;
       documentReference.current = undefined;
     };
   }, [url]);
@@ -213,4 +216,3 @@ export function PdfPreview({ name, url }) {
     </div>
   );
 }
-
