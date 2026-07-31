@@ -546,6 +546,31 @@ test("streams a selected cloud file to the browser as an attachment", async () =
   );
 });
 
+test("streams a bounded authenticated file preview inline", async () => {
+  await withAuthenticatedServer(
+    createTestApplication(),
+    async (baseUrl, authenticatedFetch) => {
+      const response = await authenticatedFetch(
+        `${baseUrl}/api/storage/azure/files/azure-file-1/preview?` +
+          new URLSearchParams({ path: "/azure-file.txt" })
+      );
+
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get("content-type"), /^text\/plain/);
+      assert.match(
+        response.headers.get("content-disposition"),
+        /inline; filename="azure-file\.txt"/
+      );
+      assert.equal(response.headers.get("x-preview-kind"), "text");
+      assert.equal(
+        response.headers.get("content-security-policy"),
+        "default-src 'none'; sandbox"
+      );
+      assert.equal(await response.text(), "azure-download");
+    }
+  );
+});
+
 test("deletes a selected Box file through the shared storage route", async () => {
   let deletedReference;
   const app = createTestApplication({

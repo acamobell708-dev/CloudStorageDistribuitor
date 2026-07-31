@@ -1,5 +1,9 @@
 import { formatBytes } from "../components/FileDropzone";
 import { Icon } from "../components/Icon";
+import {
+  browserCanRenderPreview,
+  getFilePreviewCapability
+} from "../../../src/shared/filePreviewPolicy.mjs";
 
 function formatDate(value) {
   if (!value) {
@@ -50,6 +54,7 @@ export function FileList({
   onDelete,
   onDownload,
   onOpenFolder,
+  onPreview,
   onSelect,
   providerName,
   selectedFileKey,
@@ -89,6 +94,10 @@ export function FileList({
             const selected = selectedFileKey === fileKey;
             const working = workingFileKey === fileKey;
             const isFolder = file.type === "folder";
+            const previewCapability = getFilePreviewCapability(file);
+            const canPreview = browserCanRenderPreview(
+              previewCapability
+            );
 
             return (
               <tr
@@ -131,6 +140,21 @@ export function FileList({
                   )}
                   {selected && (
                     <span className="file-row-actions">
+                      {!isFolder && canPreview && (
+                        <button
+                          aria-label={`Preview ${file.name}`}
+                          className="file-action-button file-preview-button"
+                          disabled={working}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onPreview(file);
+                          }}
+                          type="button"
+                        >
+                          <Icon name="eye" size={16} />
+                          Preview
+                        </button>
+                      )}
                       <button
                         aria-label={
                           isFolder

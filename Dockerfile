@@ -8,6 +8,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY public ./public
+COPY src/shared ./src/shared
 COPY vite.config.mjs ./
 RUN npm run build
 

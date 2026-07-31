@@ -56,6 +56,13 @@ through its folder API, while Azure is read from the configured remote branch
 through the Azure DevOps Items REST API. Selecting a row exposes its download
 action. The server verifies the current cloud item, then streams it to the
 browser without exposing provider credentials or writing another local copy.
+Preview uses the same authenticated provider lookup through a separate inline
+route. It supports browser-decodable images and audio, captures one still frame
+for browser-decodable video, renders PDFs one page at a time for up to 50 pages,
+and limits text or source previews to 256 KiB. Images are limited to 15 MiB,
+PDFs to 25 MiB, audio to 50 MiB, and video stills to 100 MiB. Office documents,
+archives, unknown binaries, unsupported codecs, and files without the metadata
+needed to apply those safeguards remain download-only.
 The normal delete action verifies the current cloud item before deleting it.
 Box enterprise settings determine whether its deletion uses trash. Azure
 creates a deletion commit, so earlier Git versions remain available.

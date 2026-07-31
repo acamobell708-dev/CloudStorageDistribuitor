@@ -194,6 +194,25 @@ test("opens a current-branch Azure item as a download stream", async () => {
   );
 });
 
+test("forwards one byte range when previewing an Azure item", async () => {
+  const calls = [];
+  const client = new AzureDevOpsApiClient({
+    fetch: async (url, options) => {
+      calls.push({ options, url });
+      return new Response("part", { status: 206 });
+    },
+    pat: "secret-pat",
+    remote:
+      "https://organization@dev.azure.com/organization/project/_git/media"
+  });
+
+  await client.downloadRepositoryItem("/media/clip.mp4", {
+    range: "bytes=0-99"
+  });
+
+  assert.equal(calls[0].options.headers.Range, "bytes=0-99");
+});
+
 test("reads the configured Azure branch reference", async () => {
   const calls = [];
   const client = new AzureDevOpsApiClient({

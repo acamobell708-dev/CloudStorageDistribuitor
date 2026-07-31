@@ -372,7 +372,7 @@ class AzureDevOpsApiClient {
     });
   }
 
-  async downloadRepositoryItem(filePath) {
+  async downloadRepositoryItem(filePath, options = {}) {
     const { apiBaseUrl } = this.getRepositoryDetails();
     const query = new URLSearchParams({
       "$format": "octetStream",
@@ -387,7 +387,8 @@ class AzureDevOpsApiClient {
       action:
         `Downloading ${filePath} from the latest ${this.branch} branch`,
       headers: {
-        Accept: "application/octet-stream"
+        Accept: "application/octet-stream",
+        ...(options.range ? { Range: options.range } : {})
       }
     });
   }

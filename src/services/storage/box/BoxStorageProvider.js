@@ -388,7 +388,16 @@ class BoxStorageProvider extends StorageProvider {
 
     const response = await this.apiClient.request(
       `${this.apiClient.apiUrl}/files/${encodeURIComponent(fileId)}/content`,
-      { action: `Downloading Box file ${fileId}` }
+      {
+        action: `Downloading Box file ${fileId}`,
+        ...(fileReference.range
+          ? {
+              headers: {
+                Range: fileReference.range
+              }
+            }
+          : {})
+      }
     );
     const responseSizeHeader = response.headers.get("content-length");
     const responseSize =
@@ -402,14 +411,20 @@ class BoxStorageProvider extends StorageProvider {
       contentType:
         response.headers.get("content-type") ||
         "application/octet-stream",
+      acceptRanges: response.headers.get("accept-ranges"),
+      contentRange: response.headers.get("content-range"),
       filename: this.fileNamingService.getDisplayName(file.name),
       id: file.id,
       provider: this.key,
+      responseSize: Number.isFinite(responseSize)
+        ? responseSize
+        : undefined,
       size: Number.isFinite(fileSize)
         ? fileSize
         : Number.isFinite(responseSize)
           ? responseSize
-          : undefined
+          : undefined,
+      status: response.status
     };
   }
 

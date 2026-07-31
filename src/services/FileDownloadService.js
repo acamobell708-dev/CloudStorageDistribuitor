@@ -18,7 +18,10 @@ class FileDownloadService {
       path:
         typeof fileReference.path === "string"
           ? fileReference.path
-          : undefined
+          : undefined,
+      ...(typeof fileReference.range === "string"
+        ? { range: fileReference.range }
+        : {})
     });
 
     if (!download?.body || !download.filename) {

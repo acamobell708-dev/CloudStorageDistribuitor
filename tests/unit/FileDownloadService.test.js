@@ -48,3 +48,26 @@ test("rejects a download without a cloud file ID", async () => {
     /cloud file ID is required/
   );
 });
+
+test("forwards one validated preview range to the provider", async () => {
+  let receivedReference;
+  const service = new FileDownloadService({
+    get: () => ({
+      displayName: "Test Cloud",
+      downloadCloudFile: async (fileReference) => {
+        receivedReference = fileReference;
+        return {
+          body: Buffer.from("part"),
+          filename: "clip.mp4"
+        };
+      }
+    })
+  });
+
+  await service.getDownload("test", {
+    id: "file-1",
+    range: "bytes=0-99"
+  });
+
+  assert.equal(receivedReference.range, "bytes=0-99");
+});

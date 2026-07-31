@@ -588,7 +588,9 @@ class AzureDevOpsStorageProvider extends StorageProvider {
 
   async downloadCloudFile(fileReference) {
     const item = await this.findCurrentCloudItem(fileReference);
-    const response = await this.apiClient.downloadRepositoryItem(item.path);
+    const response = await this.apiClient.downloadRepositoryItem(item.path, {
+      range: fileReference.range
+    });
     const responseSizeHeader = response.headers.get("content-length");
     const responseSize =
       responseSizeHeader === null
@@ -603,15 +605,21 @@ class AzureDevOpsStorageProvider extends StorageProvider {
         response.headers.get("content-type") ||
         item.contentMetadata?.contentType ||
         "application/octet-stream",
+      acceptRanges: response.headers.get("accept-ranges"),
+      contentRange: response.headers.get("content-range"),
       filename: this.fileNamingService.getDisplayName(storedName),
       id: item.objectId,
       path: item.path,
       provider: this.key,
+      responseSize: Number.isFinite(responseSize)
+        ? responseSize
+        : undefined,
       size: Number.isFinite(itemSize)
         ? itemSize
         : Number.isFinite(responseSize)
           ? responseSize
-          : undefined
+          : undefined,
+      status: response.status
     };
   }
 

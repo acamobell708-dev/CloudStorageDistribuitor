@@ -695,6 +695,16 @@
   background: #245cc6;
 }
 
+.file-preview-button {
+  border-color: #357c78;
+  background: #3c8b86;
+  box-shadow: 0 5px 14px rgba(41, 111, 106, 0.2);
+}
+
+.file-preview-button:hover:not(:disabled) {
+  background: #317771;
+}
+
 .file-delete-button {
   border-color: #e2aeb3;
   color: #a83a45;
@@ -779,6 +789,365 @@
   padding: 24px;
   background: rgba(20, 29, 45, 0.55);
   backdrop-filter: blur(3px);
+}
+
+.file-preview-backdrop {
+  position: fixed;
+  z-index: 110;
+  inset: 0;
+  display: grid;
+  overflow-y: auto;
+  place-items: center;
+  padding: 24px;
+  background: rgba(17, 27, 43, 0.64);
+  backdrop-filter: blur(4px);
+}
+
+.file-preview-dialog {
+  display: grid;
+  width: min(100%, 980px);
+  max-height: min(90vh, 860px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid #dce4ef;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 28px 85px rgba(20, 31, 50, 0.32);
+}
+
+.file-preview-dialog > header {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 18px 21px;
+  border-bottom: 1px solid #e8edf4;
+  background: #fbfcfe;
+}
+
+.file-preview-dialog header h2 {
+  overflow: hidden;
+  max-width: min(68vw, 690px);
+  margin: 4px 0 2px;
+  color: #24324a;
+  font-size: 17px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-preview-dialog header p {
+  margin: 0;
+  color: #8a95a7;
+  font-size: 8px;
+}
+
+.file-preview-heading-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  color: #337b77;
+  background: #e9f6f4;
+}
+
+.file-preview-dialog .dialog-close-button:hover {
+  background: #edf1f6;
+}
+
+.file-preview-content {
+  min-height: 340px;
+  overflow: auto;
+  background:
+    linear-gradient(45deg, #f7f9fc 25%, transparent 25%) 0 0 / 18px 18px,
+    linear-gradient(-45deg, #f7f9fc 25%, transparent 25%) 0 0 / 18px 18px,
+    linear-gradient(45deg, transparent 75%, #f7f9fc 75%) 0 0 / 18px 18px,
+    linear-gradient(-45deg, transparent 75%, #f7f9fc 75%) 0 0 / 18px 18px,
+    #fbfcfe;
+}
+
+.file-preview-dialog > footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 20px;
+  border-top: 1px solid #e5eaf1;
+  background: #fff;
+}
+
+.file-preview-dialog > footer p {
+  margin: 0;
+  color: #8a95a6;
+  font-size: 8px;
+}
+
+.file-preview-dialog > footer > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-preview-dialog .dialog-cancel-button {
+  min-height: 36px;
+}
+
+.preview-download-button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid #b9cdef;
+  border-radius: 9px;
+  color: #285fbd;
+  background: #f4f8ff;
+  font-size: 9px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.preview-download-button:hover {
+  border-color: #94b2e4;
+  background: #eaf2ff;
+}
+
+.preview-loading,
+.preview-error {
+  display: flex;
+  min-height: 340px;
+  justify-content: center;
+  align-items: center;
+  gap: 11px;
+  margin: 0;
+  padding: 32px;
+  color: #6d7b91;
+  font-size: 10px;
+  text-align: center;
+}
+
+.preview-error {
+  color: #a63d48;
+  background: #fff8f8;
+}
+
+.image-preview {
+  display: grid;
+  min-height: 340px;
+  place-items: center;
+  padding: 24px;
+}
+
+.image-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: min(62vh, 650px);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(24, 37, 59, 0.18);
+  object-fit: contain;
+}
+
+.audio-preview {
+  display: flex;
+  min-height: 340px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 32px;
+  background: radial-gradient(circle at 50% 35%, #eef8f6, #f9fbfd 55%);
+}
+
+.audio-preview strong {
+  max-width: 620px;
+  overflow: hidden;
+  color: #34445b;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-preview audio {
+  width: min(100%, 580px);
+}
+
+.audio-preview-art {
+  display: flex;
+  width: 105px;
+  height: 105px;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #347d78, #285fa5);
+  box-shadow: 0 15px 35px rgba(46, 105, 129, 0.22);
+}
+
+.audio-preview-art span {
+  width: 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.audio-preview-art span:nth-child(1),
+.audio-preview-art span:nth-child(5) {
+  height: 19px;
+}
+
+.audio-preview-art span:nth-child(2),
+.audio-preview-art span:nth-child(4) {
+  height: 34px;
+}
+
+.audio-preview-art span:nth-child(3) {
+  height: 47px;
+}
+
+.video-thumbnail-preview {
+  display: grid;
+  min-height: 340px;
+  place-items: center;
+  padding: 24px;
+}
+
+.video-thumbnail-preview video {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.video-thumbnail-preview canvas {
+  display: block;
+  max-width: 100%;
+  max-height: min(58vh, 620px);
+  border-radius: 9px;
+  background: #101722;
+  box-shadow: 0 15px 40px rgba(19, 30, 47, 0.23);
+  object-fit: contain;
+}
+
+.video-thumbnail-preview canvas.is-hidden {
+  display: none;
+}
+
+.video-thumbnail-caption {
+  margin: 12px 0 0;
+  color: #748196;
+  font-size: 8px;
+}
+
+.text-preview {
+  min-height: 340px;
+  padding: 18px;
+  background: #182235;
+}
+
+.text-preview pre {
+  min-height: 304px;
+  margin: 0;
+  overflow: auto;
+  color: #dbe7fa;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.65;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.preview-limit-note {
+  margin: 0;
+  padding: 8px 11px;
+  border-bottom: 1px solid #dfe6ef;
+  color: #607088;
+  background: #f6f9fd;
+  font-size: 8px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.text-preview .preview-limit-note {
+  margin: -18px -18px 15px;
+  border-color: #324158;
+  color: #a9b9d0;
+  background: #202d42;
+}
+
+.pdf-preview {
+  min-height: 340px;
+}
+
+.pdf-preview-toolbar {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr) 90px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid #dde4ed;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 13px rgba(34, 50, 73, 0.06);
+}
+
+.pdf-preview-toolbar span {
+  color: #65738a;
+  font-size: 8px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pdf-preview-toolbar button {
+  min-height: 31px;
+  border: 1px solid #d7e0ed;
+  border-radius: 8px;
+  color: #3f6198;
+  background: #f8faff;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.pdf-preview-toolbar button:hover:not(:disabled) {
+  border-color: #adc3e6;
+  color: #255dbd;
+}
+
+.pdf-preview-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pdf-canvas-wrap {
+  position: relative;
+  display: grid;
+  min-height: 300px;
+  place-items: start center;
+  padding: 22px;
+}
+
+.pdf-canvas-wrap canvas {
+  display: block;
+  max-width: 100%;
+  height: auto !important;
+  background: #fff;
+  box-shadow: 0 10px 32px rgba(26, 39, 60, 0.18);
+}
+
+.pdf-page-loading {
+  position: absolute;
+  z-index: 1;
+  top: 35px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  color: #596981;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 14px rgba(30, 42, 62, 0.12);
+  font-size: 8px;
 }
 
 .permanent-delete-dialog {
@@ -1088,6 +1457,76 @@
   .permanent-delete-backdrop {
     align-items: end;
     padding: 12px;
+  }
+
+  .file-preview-backdrop {
+    align-items: end;
+    padding: 8px;
+  }
+
+  .file-preview-dialog {
+    max-height: 94vh;
+    border-radius: 15px 15px 10px 10px;
+  }
+
+  .file-preview-dialog > header {
+    padding: 14px;
+  }
+
+  .file-preview-heading-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .file-preview-dialog header h2 {
+    max-width: 58vw;
+    font-size: 14px;
+  }
+
+  .file-preview-content,
+  .preview-loading,
+  .preview-error,
+  .image-preview,
+  .audio-preview,
+  .video-thumbnail-preview {
+    min-height: 285px;
+  }
+
+  .file-preview-dialog > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .file-preview-dialog > footer > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .preview-download-button,
+  .file-preview-dialog .dialog-cancel-button {
+    justify-content: center;
+  }
+
+  .file-row.is-selected td:first-child {
+    min-height: 58px;
+  }
+
+  .file-row-actions {
+    right: 10px;
+    left: 10px;
+    gap: 5px;
+    transform: translateY(-50%);
+  }
+
+  .file-action-button {
+    min-width: 0;
+    flex: 1;
+    padding: 0 7px;
+  }
+
+  .pdf-preview-toolbar {
+    grid-template-columns: 70px minmax(0, 1fr) 70px;
+    padding: 8px;
   }
 
   .permanent-delete-dialog > footer {

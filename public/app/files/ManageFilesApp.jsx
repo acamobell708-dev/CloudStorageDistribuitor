@@ -9,6 +9,7 @@ import { createFileKey, FileList } from "./FileList";
 import { FileViewControls } from "./FileViewControls";
 import { createFileListing } from "./fileListing.mjs";
 import { PermanentDeletionDialog } from "./PermanentDeletionDialog";
+import { FilePreviewModal } from "./preview/FilePreviewModal";
 import { ProviderSelector } from "./ProviderSelector";
 
 export function ManageFilesApp() {
@@ -38,6 +39,7 @@ export function ManageFilesApp() {
   const [purgeDialog, setPurgeDialog] = useState({
     open: false
   });
+  const [previewFile, setPreviewFile] = useState();
   const [refreshRequest, setRefreshRequest] = useState({
     background: false,
     sequence: 0
@@ -196,6 +198,7 @@ export function ManageFilesApp() {
     setNavigation({ breadcrumbs: [] });
     setFileAction({ status: "idle" });
     setPurgeDialog({ open: false });
+    setPreviewFile(undefined);
     setSelectedFileKey(undefined);
     setFileView((current) => ({
       ...current,
@@ -228,6 +231,7 @@ export function ManageFilesApp() {
 
     setFiles([]);
     setFileAction({ status: "idle" });
+    setPreviewFile(undefined);
     setSelectedFileKey(undefined);
     setFileView((current) => ({
       ...current,
@@ -249,6 +253,16 @@ export function ManageFilesApp() {
   const downloadFile = (file) => {
     downloadService.download(selectedProviderKey, file);
   };
+
+  const openPreview = (file) => {
+    if (!actionInProgress) {
+      setPreviewFile(file);
+    }
+  };
+
+  const closePreview = useCallback(() => {
+    setPreviewFile(undefined);
+  }, []);
 
   const deleteFile = async (file) => {
     const fileKey = createFileKey(file);
@@ -272,6 +286,7 @@ export function ManageFilesApp() {
         )
       );
       setSelectedFileKey(undefined);
+      setPreviewFile(undefined);
       setFileAction({
         detail:
           `${file.name} was deleted from ` +
@@ -585,6 +600,7 @@ export function ManageFilesApp() {
               onDelete={deleteFile}
               onDownload={downloadFile}
               onOpenFolder={openFolder}
+              onPreview={openPreview}
               onSelect={selectFile}
               providerName={selectedProvider?.displayName || "provider"}
               selectedFileKey={selectedFileKey}
@@ -600,6 +616,27 @@ export function ManageFilesApp() {
         onConfirm={permanentlyDeleteFile}
         open={purgeDialog.open}
         working={fileAction.status === "purging"}
+      />
+      <FilePreviewModal
+        downloadUrl={
+          previewFile
+            ? apiClient.getFileDownloadUrl(
+                selectedProviderKey,
+                previewFile
+              )
+            : undefined
+        }
+        file={previewFile}
+        onClose={closePreview}
+        open={Boolean(previewFile)}
+        previewUrl={
+          previewFile
+            ? apiClient.getFilePreviewUrl(
+                selectedProviderKey,
+                previewFile
+              )
+            : undefined
+        }
       />
     </AppShell>
   );

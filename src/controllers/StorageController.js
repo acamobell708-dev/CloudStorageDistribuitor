@@ -10,6 +10,7 @@ class StorageController {
     fileDeletionService,
     fileDownloadService,
     fileListingService,
+    filePreviewService,
     fileUploadService,
     permanentFileDeletionService,
     providerFactory
@@ -17,6 +18,7 @@ class StorageController {
     this.fileDeletionService = fileDeletionService;
     this.fileDownloadService = fileDownloadService;
     this.fileListingService = fileListingService;
+    this.filePreviewService = filePreviewService;
     this.fileUploadService = fileUploadService;
     this.permanentFileDeletionService = permanentFileDeletionService;
     this.providerFactory = providerFactory;
@@ -108,6 +110,69 @@ class StorageController {
     }
   };
 
+  previewFile = async (request, response, next) => {
+    try {
+      const preview = await this.filePreviewService.getPreview(
+        request.params.provider,
+        {
+          id: request.params.fileId,
+          path: request.query.path
+        },
+        {
+          range: request.get("Range")
+        }
+      );
+      const body = this.createDownloadStream(preview.body);
+      const status = preview.status === 206 ? 206 : 200;
+      const responseSize = Number(preview.responseSize);
+
+      response.status(status);
+      response.set({
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": this.createInlineDisposition(
+          preview.filename
+        ),
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Cross-Origin-Resource-Policy": "same-origin",
+        "X-Preview-Kind": preview.kind
+      });
+
+      if (preview.contentType) {
+        response.set("Content-Type", preview.contentType);
+      }
+
+      if (preview.acceptRanges || preview.contentRange) {
+        response.set("Accept-Ranges", preview.acceptRanges || "bytes");
+      }
+
+      if (preview.contentRange) {
+        response.set("Content-Range", preview.contentRange);
+      }
+
+      if (Number.isFinite(responseSize) && responseSize >= 0) {
+        response.set("Content-Length", String(responseSize));
+      } else if (
+        status === 200 &&
+        Number.isFinite(preview.size) &&
+        preview.size >= 0
+      ) {
+        response.set("Content-Length", String(preview.size));
+      }
+
+      if (preview.pageLimit) {
+        response.set("X-Preview-Page-Limit", String(preview.pageLimit));
+      }
+
+      if (preview.truncated) {
+        response.set("X-Preview-Truncated", "true");
+      }
+
+      await pipeline(body, response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   uploadFile = async (request, response, next) => {
     try {
       const files = [
@@ -155,6 +220,23 @@ class StorageController {
     }
 
     throw new TypeError("The cloud provider returned an invalid file stream");
+  }
+
+  createInlineDisposition(filename) {
+    const normalizedFilename = String(filename || "preview");
+    const asciiFilename = normalizedFilename
+      .replace(/[^\x20-\x7e]/g, "_")
+      .replace(/["\\\r\n]/g, "_");
+    const encodedFilename = encodeURIComponent(normalizedFilename).replace(
+      /['()*]/g,
+      (character) =>
+        `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+    );
+
+    return (
+      `inline; filename="${asciiFilename}"; ` +
+      `filename*=UTF-8''${encodedFilename}`
+    );
   }
 }
 

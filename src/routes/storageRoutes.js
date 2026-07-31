@@ -83,6 +83,11 @@ function createStorageRoutes({
     requirePermission(permissions.downloadFiles),
     controller.downloadFile
   );
+  router.get(
+    "/:provider/files/:fileId/preview",
+    requirePermission(permissions.downloadFiles),
+    controller.previewFile
+  );
   router.delete(
     "/:provider/files/:fileId/history",
     requirePermission(permissions.permanentlyDeleteFiles),

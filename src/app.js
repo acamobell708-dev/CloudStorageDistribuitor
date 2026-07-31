@@ -19,6 +19,7 @@ const { createStorageRoutes } = require("./routes/storageRoutes");
 const { FileDeletionService } = require("./services/FileDeletionService");
 const { FileDownloadService } = require("./services/FileDownloadService");
 const { FileListingService } = require("./services/FileListingService");
+const { FilePreviewService } = require("./services/FilePreviewService");
 const { FileUploadService } = require("./services/FileUploadService");
 const {
   PermanentFileDeletionService
@@ -86,6 +87,9 @@ function createApp(options = {}) {
   const fileDownloadService =
     options.fileDownloadService ||
     new FileDownloadService(providerFactory);
+  const filePreviewService =
+    options.filePreviewService ||
+    new FilePreviewService(fileDownloadService);
   const fileDeletionService =
     options.fileDeletionService ||
     new FileDeletionService(providerFactory);
@@ -102,6 +106,7 @@ function createApp(options = {}) {
     fileDeletionService,
     fileDownloadService,
     fileListingService,
+    filePreviewService,
     fileUploadService,
     permanentFileDeletionService,
     providerFactory

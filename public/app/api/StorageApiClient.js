@@ -92,6 +92,11 @@ export class StorageApiClient {
     return this.appendFileUrlSegment(fileUrl, "download");
   }
 
+  getFilePreviewUrl(provider, file) {
+    const fileUrl = this.getFileUrl(provider, file);
+    return this.appendFileUrlSegment(fileUrl, "preview");
+  }
+
   appendFileUrlSegment(fileUrl, segment) {
     const queryIndex = fileUrl.indexOf("?");
 

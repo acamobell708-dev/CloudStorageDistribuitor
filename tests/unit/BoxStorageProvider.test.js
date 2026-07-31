@@ -345,6 +345,47 @@ test("opens a configured-folder Box file as a browser download stream", async ()
   assert.match(apiClient.calls[1].url, /files\/file-1\/content/);
 });
 
+test("forwards a byte range when previewing a Box file", async () => {
+  const apiClient = createApiClient([
+    {
+      id: "file-1",
+      name: "clip.mp4",
+      parent: {
+        id: "123"
+      },
+      size: 1024,
+      type: "file"
+    }
+  ]);
+  apiClient.request = async (url, options) => {
+    apiClient.calls.push({ options, url });
+    return new Response("part", {
+      headers: {
+        "Accept-Ranges": "bytes",
+        "Content-Length": "4",
+        "Content-Range": "bytes 0-3/1024",
+        "Content-Type": "video/mp4"
+      },
+      status: 206
+    });
+  };
+  const provider = new BoxStorageProvider({
+    accountMaximumUploadSizeBytes: 1024,
+    apiClient,
+    folderId: "123"
+  });
+
+  const download = await provider.downloadCloudFile({
+    id: "file-1",
+    range: "bytes=0-3"
+  });
+
+  assert.equal(apiClient.calls[1].options.headers.Range, "bytes=0-3");
+  assert.equal(download.status, 206);
+  assert.equal(download.contentRange, "bytes 0-3/1024");
+  assert.equal(download.responseSize, 4);
+});
+
 test("deletes only a file from the configured Box folder", async () => {
   const apiClient = createApiClient([
     {
