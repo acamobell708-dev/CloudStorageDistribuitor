@@ -218,15 +218,14 @@ export default function App() {
             <div>
               <span className="section-kicker">
                 <span />
-                Secure cloud transfer
+                Secure and live Cloud Data Management
               </span>
               <h1>
-                Every upload. <em>Right where it belongs.</em>
+                Every upload. <em>Managed where you want it.</em>
               </h1>
               <p>
-                Send files and folders to Box or Azure Repos—without
-                exposing a single credential or mixing storage data into this
-                application repository.
+                Send single, multiple or folders of media to Box or Azure Repos—without
+                exposing credentials, and safely managing these directly from the site.
               </p>
             </div>
             <div className="hero-stat">

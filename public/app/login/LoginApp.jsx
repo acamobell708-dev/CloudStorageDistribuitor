@@ -85,14 +85,11 @@ export function LoginApp() {
   return (
     <main className="login-page">
       <a className="login-brand" href="/login.html">
-        <span className="brand-mark" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </span>
-        <span>
-          CLOUD<span>PORT</span>
-        </span>
+        <img
+          className="brand-logo"
+          src="/CloudDisLogo.png"
+          alt="Cloud Storage Distributor"
+        />
       </a>
 
       <section className="login-shell">

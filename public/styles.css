@@ -72,51 +72,15 @@ a {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 11px;
   width: max-content;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.085em;
 }
 
-.brand > span:last-child > span {
-  color: var(--blue);
-}
-
-.brand-mark {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(3, 5px);
-  align-items: end;
-  gap: 2px;
-  width: 23px;
-  height: 24px;
-  padding: 4px;
-  overflow: hidden;
-  border-radius: 7px;
-  color: white;
-  background: linear-gradient(145deg, #2d74ff, #174dcc);
-  box-shadow: 0 5px 12px rgba(33, 99, 238, 0.24);
-}
-
-.brand-mark span {
+.brand-logo {
   display: block;
-  border-radius: 2px 2px 1px 1px;
-  background: white;
-}
-
-.brand-mark span:nth-child(1) {
-  height: 7px;
-  opacity: 0.65;
-}
-
-.brand-mark span:nth-child(2) {
-  height: 13px;
-}
-
-.brand-mark span:nth-child(3) {
-  height: 10px;
-  opacity: 0.8;
+  width: clamp(148px, 18vw, 172px);
+  height: 34px;
+  object-fit: cover;
+  object-position: center;
 }
 
 .topbar nav {

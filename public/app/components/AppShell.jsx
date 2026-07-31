@@ -99,14 +99,11 @@ export function AppShell({ activePage, children }) {
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="/" aria-label="Cloud Storage home">
-          <span className="brand-mark" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
-          <span>
-            CLOUD<span>PORT</span>
-          </span>
+          <img
+            className="brand-logo"
+            src="/CloudDisLogo.png"
+            alt="Cloud Storage Distributor"
+          />
         </a>
         <div className="topbar-actions">
           <nav aria-label="Primary navigation">

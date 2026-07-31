@@ -8,14 +8,6 @@
 .login-brand {
   display: inline-flex;
   align-items: center;
-  gap: 11px;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.085em;
-}
-
-.login-brand > span:last-child > span {
-  color: var(--blue);
 }
 
 .login-shell {
