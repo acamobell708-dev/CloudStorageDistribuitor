@@ -1160,6 +1160,11 @@ main {
   display: block;
 }
 
+.provider-card-copy {
+  flex: 1;
+  min-width: 0;
+}
+
 .provider-card strong {
   margin-bottom: 4px;
   color: #28354c;
@@ -1172,8 +1177,17 @@ main {
   line-height: 1.4;
 }
 
+.provider-card-copy .provider-guidance {
+  display: block;
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
 .provider-card .provider-check {
   display: grid;
+  flex: 0 0 auto;
   place-items: center;
   width: 19px;
   height: 19px;

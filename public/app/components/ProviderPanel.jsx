@@ -1,13 +1,25 @@
 import { Icon } from "./Icon";
+import { formatBytes } from "./FileDropzone";
 
 const providerPresentation = {
   azure: {
     icon: "azure",
-    logoClass: "azure-logo"
+    logoClass: "azure-logo",
+    guidance: (provider) => {
+      const uploadLimit = Number.isFinite(provider.maximumUploadSizeBytes)
+        ? ` Uploads are limited to ${formatBytes(
+            provider.maximumUploadSizeBytes
+          )} per file.`
+        : "";
+
+      return `Best for files, documents and code.${uploadLimit} You can clear selections before sending; after upload, current-branch deletion is available while permanent Git-history deletion requires an administrator.`;
+    }
   },
   box: {
     icon: "box",
-    logoClass: "box-logo"
+    logoClass: "box-logo",
+    guidance: () =>
+      "Best for videos and other media, especially content you may want to delete easily later."
   }
 };
 
@@ -66,6 +78,9 @@ export function ProviderPanel({
                   ? provider.description
                   : provider.connectionError || "Add server configuration"}
               </span>
+              <small className="provider-guidance">
+                {presentation.guidance(provider)}
+              </small>
             </span>
             {selected ? (
               <span className="provider-check">
