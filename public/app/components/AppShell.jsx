@@ -42,6 +42,20 @@ const navigationSections = [
   }
 ];
 
+const topNavigationLinks = [
+  {
+    href: "/",
+    key: "upload",
+    label: "Home"
+  },
+  {
+    href: "/manageFiles.html",
+    key: "files",
+    label: "Manage Files",
+    requiredPermission: permissions.listFiles
+  }
+];
+
 export function AppShell({ activePage, children }) {
   const { hasPermission } = useAuthSession();
 
@@ -60,12 +74,26 @@ export function AppShell({ activePage, children }) {
         </a>
         <div className="topbar-actions">
           <nav aria-label="Primary navigation">
-            <a
-              className={activePage === "upload" ? "is-active" : ""}
-              href="/"
-            >
-              Home
-            </a>
+            {topNavigationLinks
+              .filter(
+                (link) =>
+                  !link.requiredPermission ||
+                  hasPermission(link.requiredPermission)
+              )
+              .map((link) => (
+                <a
+                  aria-current={
+                    activePage === link.key ? "page" : undefined
+                  }
+                  className={
+                    activePage === link.key ? "is-active" : ""
+                  }
+                  href={link.href}
+                  key={link.key}
+                >
+                  {link.label}
+                </a>
+              ))}
           </nav>
           <UserMenu />
         </div>

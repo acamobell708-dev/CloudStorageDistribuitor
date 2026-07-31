@@ -27,6 +27,12 @@ const files = [
     type: "folder"
   },
   {
+    modifiedAt: "2026-07-30T11:00:00Z",
+    name: "Archive",
+    path: "/Archive",
+    type: "folder"
+  },
+  {
     modifiedAt: "2026-07-29T10:00:00Z",
     name: "cover.jpg",
     path: "/media/cover.jpg",
@@ -49,11 +55,15 @@ const files = [
 test("filters files with the shared media classifier", async () => {
   const { createFileListing, getFileCategory } =
     await loadFileListingModule();
+  const categoryByName = new Map(
+    files.map((file) => [file.name, getFileCategory(file)])
+  );
 
-  assert.equal(getFileCategory(files[0]), "folder");
-  assert.equal(getFileCategory(files[1]), "image");
-  assert.equal(getFileCategory(files[2]), "video");
-  assert.equal(getFileCategory(files[3]), "source");
+  assert.equal(categoryByName.get("Projects"), "folder");
+  assert.equal(categoryByName.get("Archive"), "folder");
+  assert.equal(categoryByName.get("cover.jpg"), "image");
+  assert.equal(categoryByName.get("launch.mp4"), "video");
+  assert.equal(categoryByName.get("server.js"), "source");
   assert.deepEqual(
     createFileListing(files, { filter: "source" }).map(
       (file) => file.name
@@ -73,26 +83,39 @@ test("searches names and paths without a provider request", async () => {
   );
 });
 
-test("sorts files while keeping browsable folders first", async () => {
+test("sorts files and folders using their available metadata", async () => {
   const { createFileListing } = await loadFileListingModule();
 
+  assert.deepEqual(
+    createFileListing(files, { sort: "name-desc" }).map(
+      (file) => file.name
+    ),
+    ["server.js", "Projects", "launch.mp4", "cover.jpg", "Archive"]
+  );
   assert.deepEqual(
     createFileListing(files, { sort: "size-desc" }).map(
       (file) => file.name
     ),
-    ["Projects", "launch.mp4", "cover.jpg", "server.js"]
+    ["launch.mp4", "cover.jpg", "server.js", "Archive", "Projects"]
   );
   assert.deepEqual(
     createFileListing(files, { sort: "size-asc" }).map(
       (file) => file.name
     ),
-    ["Projects", "server.js", "cover.jpg", "launch.mp4"]
+    ["server.js", "cover.jpg", "launch.mp4", "Archive", "Projects"]
   );
   assert.deepEqual(
     createFileListing(files, { sort: "updated-desc" }).map(
       (file) => file.name
     ),
-    ["Projects", "server.js", "cover.jpg", "launch.mp4"]
+    ["Archive", "server.js", "cover.jpg", "launch.mp4", "Projects"]
+  );
+  assert.deepEqual(
+    createFileListing(files, {
+      filter: "folder",
+      sort: "updated-asc"
+    }).map((file) => file.name),
+    ["Projects", "Archive"]
   );
 });
 

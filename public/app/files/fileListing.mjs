@@ -14,6 +14,7 @@ export const fileTypeFilters = Object.freeze([
 
 export const fileSortOptions = Object.freeze([
   { key: "name-asc", label: "Name A–Z" },
+  { key: "name-desc", label: "Name Z–A" },
   { key: "size-desc", label: "Largest first" },
   { key: "size-asc", label: "Smallest first" },
   { key: "updated-desc", label: "Recently updated" },
@@ -43,21 +44,27 @@ function matchesSearch(file, query) {
 
 function getTimestamp(file) {
   const timestamp = Date.parse(file?.modifiedAt);
-  return Number.isFinite(timestamp) ? timestamp : 0;
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+function getSize(file) {
+  const size = Number(file?.size);
+  return Number.isFinite(size) && size >= 0 ? size : undefined;
 }
 
 function compareFiles(first, second, sort) {
-  const firstIsFolder = first?.type === "folder";
-  const secondIsFolder = second?.type === "folder";
-
-  if (firstIsFolder !== secondIsFolder) {
-    return firstIsFolder ? -1 : 1;
-  }
-
   if (sort === "size-desc" || sort === "size-asc") {
+    const firstSize = getSize(first);
+    const secondSize = getSize(second);
+
+    if (firstSize === undefined || secondSize === undefined) {
+      if (firstSize !== secondSize) {
+        return firstSize === undefined ? 1 : -1;
+      }
+    }
+
     const direction = sort === "size-desc" ? -1 : 1;
-    const difference =
-      (Number(first?.size) || 0) - (Number(second?.size) || 0);
+    const difference = (firstSize || 0) - (secondSize || 0);
 
     if (difference !== 0) {
       return difference * direction;
@@ -65,15 +72,33 @@ function compareFiles(first, second, sort) {
   }
 
   if (sort === "updated-desc" || sort === "updated-asc") {
+    const firstTimestamp = getTimestamp(first);
+    const secondTimestamp = getTimestamp(second);
+
+    if (
+      firstTimestamp === undefined ||
+      secondTimestamp === undefined
+    ) {
+      if (firstTimestamp !== secondTimestamp) {
+        return firstTimestamp === undefined ? 1 : -1;
+      }
+    }
+
     const direction = sort === "updated-desc" ? -1 : 1;
-    const difference = getTimestamp(first) - getTimestamp(second);
+    const difference =
+      (firstTimestamp || 0) - (secondTimestamp || 0);
 
     if (difference !== 0) {
       return difference * direction;
     }
   }
 
-  return nameCollator.compare(first?.name || "", second?.name || "");
+  const nameComparison = nameCollator.compare(
+    first?.name || "",
+    second?.name || ""
+  );
+
+  return sort === "name-desc" ? -nameComparison : nameComparison;
 }
 
 export function createFileListing(files = [], options = {}) {
