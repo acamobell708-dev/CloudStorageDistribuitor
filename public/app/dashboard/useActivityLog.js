@@ -46,6 +46,13 @@ export function useActivityLog(apiClient, enabled) {
           signal: controller.signal
         });
 
+        for (const warning of result.fallbackWarnings || []) {
+          const status = warning.status ? ` (HTTP ${warning.status})` : "";
+          console.warn(
+            `[Dashboard activity] ${warning.provider} history fallback: ${warning.code}${status}`
+          );
+        }
+
         setActivity(result);
         setPage(result.history?.page || 1);
       } catch (requestError) {
