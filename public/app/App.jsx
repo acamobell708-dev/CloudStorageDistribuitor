@@ -218,7 +218,7 @@ export default function App() {
             <div>
               <span className="section-kicker">
                 <span />
-                Secure and live Cloud Data Management
+                Cloud Storage Distributor
               </span>
               <h1>
                 Every upload. <em>Managed where you want it.</em>
