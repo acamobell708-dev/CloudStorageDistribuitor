@@ -252,7 +252,7 @@
 
 @media (max-width: 760px) {
   .login-page {
-    padding: 25px 16px;
+    padding: 25px 16px calc(25px + env(safe-area-inset-bottom));
   }
 
   .login-shell {
@@ -263,6 +263,19 @@
   .member-login,
   .guest-login {
     padding: 34px 25px;
+  }
+
+  .member-login h1 {
+    font-size: clamp(32px, 10.5vw, 38px);
+  }
+
+  .login-input input {
+    font-size: 16px;
+  }
+
+  .login-submit,
+  .guest-login-button {
+    min-height: 50px;
   }
 
   .guest-login {

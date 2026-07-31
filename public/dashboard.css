@@ -681,7 +681,7 @@
   }
 
   .dashboard-heading h1 {
-    font-size: 38px;
+    font-size: clamp(32px, 10.5vw, 38px);
   }
 
   .dashboard-access-card {
@@ -708,6 +708,33 @@
 
   .chart-detail {
     min-height: 0;
+  }
+
+  .chart-legend li {
+    min-height: 44px;
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .chart-detail-heading button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .chart-detail-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .chart-loading {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .chart-loading-ring {
+    width: min(100%, 150px);
   }
 }
 

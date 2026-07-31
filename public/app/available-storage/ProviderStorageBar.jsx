@@ -95,6 +95,7 @@ export function ProviderStorageBar({ loading, provider }) {
                       className={`storage-segment storage-segment--${segment.colorKey}`}
                       key={segment.key}
                       onBlur={() => setActiveKey(undefined)}
+                      onClick={() => setActiveKey(segment.key)}
                       onFocus={() => setActiveKey(segment.key)}
                       onMouseEnter={() => setActiveKey(segment.key)}
                       style={{ "--segment-share": `${percent}%` }}
@@ -121,7 +122,7 @@ export function ProviderStorageBar({ loading, provider }) {
                     <span>
                       {provider.capacityBytes
                         ? `${formatBytes(availableBytes)} available`
-                        : "Hover over a section for details"}
+                        : "Select a section for details"}
                     </span>
                   </>
                 )}
@@ -144,11 +145,19 @@ export function ProviderStorageBar({ loading, provider }) {
             .filter((segment) => segment.key !== "remaining")
             .map((segment) => (
               <li key={segment.key}>
-                <i
-                  className={`legend-dot legend-dot--${segment.colorKey}`}
-                />
-                <span>{segment.label}</span>
-                <strong>{formatBytes(segment.value)}</strong>
+                <button
+                  aria-pressed={activeKey === segment.key}
+                  onClick={() => setActiveKey(segment.key)}
+                  onFocus={() => setActiveKey(segment.key)}
+                  onMouseEnter={() => setActiveKey(segment.key)}
+                  type="button"
+                >
+                  <i
+                    className={`legend-dot legend-dot--${segment.colorKey}`}
+                  />
+                  <span>{segment.label}</span>
+                  <strong>{formatBytes(segment.value)}</strong>
+                </button>
               </li>
             ))}
         </ul>

@@ -388,12 +388,26 @@
   list-style: none;
 }
 
-.capacity-legend li {
+.capacity-legend button {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-height: 26px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 7px;
   color: #7f899b;
+  background: transparent;
+  cursor: pointer;
   font-size: 8px;
+}
+
+.capacity-legend button:hover,
+.capacity-legend button:focus-visible,
+.capacity-legend button[aria-pressed="true"] {
+  outline: none;
+  color: #344f7e;
+  background: #eef3fb;
 }
 
 .capacity-legend strong {
@@ -446,6 +460,10 @@
     display: grid;
   }
 
+  .capacity-heading h1 {
+    font-size: clamp(32px, 10.5vw, 38px);
+  }
+
   .capacity-refresh-wrap {
     justify-items: start;
   }
@@ -463,6 +481,32 @@
     padding: 0 0 15px;
     border-right: 0;
     border-bottom: 1px solid #edf0f5;
+  }
+
+  .storage-bar {
+    height: 44px;
+  }
+
+  .segment-detail {
+    flex-wrap: wrap;
+    line-height: 1.45;
+  }
+
+  .segment-detail span {
+    margin-left: 0;
+  }
+
+  .capacity-legend {
+    gap: 4px;
+  }
+
+  .capacity-legend li {
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .capacity-legend button {
+    width: 100%;
+    min-height: 42px;
   }
 }
 

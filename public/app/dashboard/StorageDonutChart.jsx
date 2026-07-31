@@ -106,7 +106,7 @@ function ChartLegend({
     <div className="chart-detail">
       <div className="chart-legend-heading">
         <strong>Breakdown</strong>
-        <span>Hover or focus a segment</span>
+        <span>Tap, hover or focus a segment</span>
       </div>
       <ul className="chart-legend">
         {segments.map((segment) => (

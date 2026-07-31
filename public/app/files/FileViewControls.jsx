@@ -158,6 +158,7 @@ export function FileViewControls({
                     }
                     id={`file-suggestion-${index}`}
                     onMouseDown={(event) => event.preventDefault()}
+                    onPointerDown={(event) => event.preventDefault()}
                     onClick={() => applySearch(file.name)}
                     role="option"
                     type="button"
