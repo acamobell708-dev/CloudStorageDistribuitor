@@ -4,12 +4,15 @@ import { permissions } from "../auth/permissions";
 import { useAuthSession } from "../auth/AuthSessionProvider";
 import { AppShell } from "../components/AppShell";
 import { Icon } from "../components/Icon";
+import { ActivityHistory } from "./ActivityHistory";
+import { ActivityScatterChart } from "./ActivityScatterChart";
 import { StorageDonutChart } from "./StorageDonutChart";
 import {
   formatBytes,
   formatRefreshTime
 } from "./storageInsights.mjs";
 import { useStorageInsights } from "./useStorageInsights";
+import { useActivityLog } from "./useActivityLog";
 
 export function DashboardApp() {
   const { hasPermission } = useAuthSession();
@@ -19,10 +22,15 @@ export function DashboardApp() {
     error,
     insights,
     loading,
-    refresh,
+    refresh: refreshInsights,
     refreshedAt,
     refreshing
   } = useStorageInsights(apiClient, canListFiles);
+  const activityLog = useActivityLog(apiClient, canListFiles);
+  const refreshDashboard = () => {
+    refreshInsights();
+    activityLog.refresh();
+  };
 
   return (
     <AppShell activePage="dashboard">
@@ -52,8 +60,13 @@ export function DashboardApp() {
               <button
                 aria-label="Refresh storage insights"
                 className="refresh-button"
-                disabled={loading || refreshing}
-                onClick={refresh}
+                disabled={
+                  loading ||
+                  refreshing ||
+                  activityLog.loading ||
+                  activityLog.refreshing
+                }
+                onClick={refreshDashboard}
                 type="button"
               >
                 <Icon name="refresh" size={16} />
@@ -108,6 +121,22 @@ export function DashboardApp() {
                 totalBytes={insights.totalBytes}
                 totalFiles={insights.totalFiles}
                 unmeasuredCount={insights.unmeasuredCount}
+              />
+            </section>
+            <section
+              aria-label="Storage activity"
+              className="activity-dashboard"
+            >
+              <ActivityScatterChart
+                dailyUploads={activityLog.activity.dailyUploads}
+                loading={activityLog.loading}
+              />
+              <ActivityHistory
+                error={activityLog.error}
+                history={activityLog.activity.history}
+                loading={activityLog.loading}
+                onPageChange={activityLog.setPage}
+                refreshing={activityLog.refreshing}
               />
             </section>
           </>

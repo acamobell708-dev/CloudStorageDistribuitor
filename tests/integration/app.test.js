@@ -233,6 +233,7 @@ function createTestApplication(overrides = {}) {
   ]);
 
   return createApp({
+    activityLogService: overrides.activityLogService,
     environment,
     providerFactory,
     userAccountService
@@ -377,6 +378,11 @@ test("creates sessions and enforces guest storage restrictions", async () => {
         method: "DELETE"
       }
     );
+    const activityResponse = await fetch(`${baseUrl}/api/activity`, {
+      headers: {
+        Cookie: guestCookie
+      }
+    });
 
     assert.equal(providerResponse.status, 200);
     assert.deepEqual(
@@ -384,9 +390,10 @@ test("creates sessions and enforces guest storage restrictions", async () => {
         listResponse.status,
         downloadResponse.status,
         uploadResponse.status,
-        deleteResponse.status
+        deleteResponse.status,
+        activityResponse.status
       ],
-      [403, 403, 403, 403]
+      [403, 403, 403, 403, 403]
     );
     assert.equal(
       (await listResponse.json()).error.code,
@@ -735,6 +742,78 @@ test("accepts a browser multipart upload and returns the Box result", async () =
     assert.equal(body.message, "hello.txt was sent to Box");
     }
   );
+});
+
+test("records successful storage activity for the shared dashboard", async () => {
+  await withServer(createTestApplication(), async (baseUrl) => {
+    const ownerCookie = await login(baseUrl);
+    const memberCookie = await login(baseUrl, {
+      password: "member-test-password",
+      username: "TestMember"
+    });
+    const ownerFetch = (url, options = {}) =>
+      fetch(url, {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          Cookie: ownerCookie
+        }
+      });
+    const upload = async (cookie, filename, provider = "box") => {
+      const form = new FormData();
+      form.append("file", new Blob([filename]), filename);
+      return fetch(`${baseUrl}/api/storage/${provider}/files`, {
+        body: form,
+        headers: { Cookie: cookie },
+        method: "POST"
+      });
+    };
+
+    assert.equal((await upload(ownerCookie, "owner.txt")).status, 201);
+    assert.equal((await upload(memberCookie, "member.txt", "azure")).status, 201);
+    assert.equal(
+      (
+        await ownerFetch(
+          `${baseUrl}/api/storage/box/files/box-file-1/download`
+        )
+      ).status,
+      200
+    );
+    assert.equal(
+      (
+        await ownerFetch(`${baseUrl}/api/storage/box/files/box-file-1`, {
+          method: "DELETE"
+        })
+      ).status,
+      200
+    );
+
+    const response = await ownerFetch(
+      `${baseUrl}/api/activity?days=14&page=1&pageSize=2`
+    );
+    const body = await response.json();
+    const uploadPoints = body.dailyUploads.days.flatMap(
+      (day) => day.points
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "private, no-store");
+    assert.equal(body.history.totalItems, 4);
+    assert.equal(body.history.items.length, 2);
+    assert.equal(body.history.hasNext, true);
+    assert.deepEqual(
+      body.history.items.map((item) => item.action),
+      ["delete", "download"]
+    );
+    assert.deepEqual(
+      uploadPoints.map((point) => point.user.displayName).sort(),
+      ["TestMember", "TestOwner"]
+    );
+    assert.deepEqual(
+      uploadPoints.map((point) => point.count).sort(),
+      [1, 1]
+    );
+  });
 });
 
 test("accepts multiple browser files through the shared upload route", async () => {

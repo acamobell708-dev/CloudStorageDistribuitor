@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const express = require("express");
 const { environment: defaultEnvironment } = require("./config/environment");
+const { ActivityController } = require("./controllers/ActivityController");
 const { AuthController } = require("./controllers/AuthController");
 const { StorageController } = require("./controllers/StorageController");
 const {
@@ -15,7 +16,9 @@ const {
   notFoundHandler
 } = require("./middleware/errorHandler");
 const { createAuthRoutes } = require("./routes/authRoutes");
+const { createActivityRoutes } = require("./routes/activityRoutes");
 const { createStorageRoutes } = require("./routes/storageRoutes");
+const { ActivityLogService } = require("./services/ActivityLogService");
 const { FileDeletionService } = require("./services/FileDeletionService");
 const { FileDownloadService } = require("./services/FileDownloadService");
 const { FileListingService } = require("./services/FileListingService");
@@ -80,6 +83,8 @@ function createApp(options = {}) {
     new SessionService({
       durationMs: config.auth?.sessionDurationMs
     });
+  const activityLogService =
+    options.activityLogService || new ActivityLogService();
   const fileUploadService =
     options.fileUploadService || new FileUploadService(providerFactory);
   const fileListingService =
@@ -102,7 +107,9 @@ function createApp(options = {}) {
     sessionService,
     userAccountService
   });
+  const activityController = new ActivityController(activityLogService);
   const controller = new StorageController({
+    activityLogService,
     fileDeletionService,
     fileDownloadService,
     fileListingService,
@@ -127,6 +134,14 @@ function createApp(options = {}) {
     "/api/auth",
     createAuthRoutes({
       controller: authController
+    })
+  );
+  app.use(
+    "/api/activity",
+    createActivityRoutes({
+      controller: activityController,
+      requireAuthentication,
+      requirePermission
     })
   );
   app.use(

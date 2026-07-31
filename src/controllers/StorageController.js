@@ -7,6 +7,7 @@ const {
 
 class StorageController {
   constructor({
+    activityLogService,
     fileDeletionService,
     fileDownloadService,
     fileListingService,
@@ -15,6 +16,7 @@ class StorageController {
     permanentFileDeletionService,
     providerFactory
   }) {
+    this.activityLogService = activityLogService;
     this.fileDeletionService = fileDeletionService;
     this.fileDownloadService = fileDownloadService;
     this.fileListingService = fileListingService;
@@ -51,16 +53,26 @@ class StorageController {
 
   deleteFile = async (request, response, next) => {
     try {
-      response.json(
-        await this.fileDeletionService.delete(
-          request.params.provider,
-          {
-            id: request.params.fileId,
-            path: request.query.path,
-            type: request.query.type
-          }
-        )
+      const result = await this.fileDeletionService.delete(
+        request.params.provider,
+        {
+          id: request.params.fileId,
+          path: request.query.path,
+          type: request.query.type
+        }
       );
+
+      this.recordActivity(request, {
+        action: "delete",
+        file: {
+          ...result.file,
+          path: result.file.path || request.query.path,
+          type: result.file.type || request.query.type
+        },
+        itemCount: result.file.removedFileCount,
+        provider: result.provider
+      });
+      response.json(result);
     } catch (error) {
       next(error);
     }
@@ -68,15 +80,21 @@ class StorageController {
 
   permanentlyDeleteFile = async (request, response, next) => {
     try {
-      response.json(
-        await this.permanentFileDeletionService.delete(
-          request.params.provider,
-          {
-            id: request.params.fileId,
-            path: request.query.path
-          }
-        )
+      const result = await this.permanentFileDeletionService.delete(
+        request.params.provider,
+        {
+          id: request.params.fileId,
+          path: request.query.path
+        }
       );
+
+      this.recordActivity(request, {
+        action: "delete",
+        file: result.file,
+        permanent: true,
+        provider: result.provider
+      });
+      response.json(result);
     } catch (error) {
       next(error);
     }
@@ -105,6 +123,16 @@ class StorageController {
       }
 
       await pipeline(body, response);
+      this.recordActivity(request, {
+        action: "download",
+        file: {
+          id: request.params.fileId,
+          name: download.filename,
+          path: request.query.path,
+          size: download.size
+        },
+        provider: this.getProviderSummary(request.params.provider)
+      });
     } catch (error) {
       next(error);
     }
@@ -196,6 +224,30 @@ class StorageController {
         manifest
       );
 
+      result.files.forEach((uploadedFile, index) => {
+        if (uploadedFile.duplicate) {
+          return;
+        }
+
+        const sourceFile = files[index] || files[0];
+        this.recordActivity(request, {
+          action: "upload",
+          file: {
+            ...uploadedFile,
+            name:
+              uploadedFile.originalName ||
+              sourceFile.originalname ||
+              uploadedFile.filename,
+            path:
+              uploadedFile.path ||
+              sourceFile.relativePath ||
+              sourceFile.originalname,
+            size: uploadedFile.size ?? sourceFile.size
+          },
+          provider: this.getProviderSummary(request.params.provider)
+        });
+      });
+
       response
         .status(
           result.duplicateCount === result.files.length ? 200 : 201
@@ -220,6 +272,26 @@ class StorageController {
     }
 
     throw new TypeError("The cloud provider returned an invalid file stream");
+  }
+
+  getProviderSummary(providerKey) {
+    const provider = this.providerFactory.get(providerKey);
+    return {
+      displayName: provider.displayName,
+      key: provider.key || providerKey
+    };
+  }
+
+  recordActivity(request, event) {
+    try {
+      this.activityLogService?.record({
+        ...event,
+        user: request.user
+      });
+    } catch {
+      // A completed storage action must not be reported as failed if optional
+      // dashboard activity tracking is unavailable.
+    }
   }
 
   createInlineDisposition(filename) {

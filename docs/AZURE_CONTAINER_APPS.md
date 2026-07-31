@@ -297,6 +297,12 @@ Because sessions are in memory:
 - only one replica is permitted;
 - uploaded cloud files are unaffected because they live in Box or Azure Repos.
 
+The dashboard activity service uses the same stateless deployment model. Its
+bounded latest-500 audit trail resets when the replica scales to zero or a new
+revision starts; this does not affect the files themselves. If activity must be
+retained across restarts, replace the isolated in-memory service with a shared
+durable store before treating the dashboard list as a permanent audit record.
+
 Keeping one always-running replica would reduce sign-outs but would consume
 more of the Container Apps allowance. Persistent sessions would require a
 shared external session store before increasing `maxReplicas`.

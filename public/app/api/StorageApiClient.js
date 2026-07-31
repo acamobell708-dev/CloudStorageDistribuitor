@@ -29,6 +29,28 @@ export class StorageApiClient {
     return body.providers || [];
   }
 
+  async listActivity(options = {}) {
+    const query = new URLSearchParams({
+      days: String(options.days || 14),
+      page: String(options.page || 1),
+      pageSize: String(options.pageSize || 10)
+    });
+    const response = await fetch(`${this.baseUrl}/activity?${query}`, {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json"
+      },
+      signal: options.signal
+    });
+    const body = await this.readJson(response);
+
+    if (!response.ok) {
+      throw this.createError(response, body);
+    }
+
+    return body;
+  }
+
   async listFiles(provider, options = {}) {
     const query = new URLSearchParams();
 

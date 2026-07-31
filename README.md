@@ -16,6 +16,8 @@ repository from one browser interface. Cloud credentials remain on the server.
   size, name, or modified-date sorting.
 - Owner-authorized Azure history purge for exceptional permanent deletion.
 - Interactive provider-capacity bars grouped by file type.
+- Dashboard upload scatter chart with per-user/day details and a paginated
+  shared upload, download, and deletion trail.
 - Predefined member accounts, in-memory sessions, and read-only guest access.
 - Shared provider base class and factory for adding future storage services.
 
@@ -77,6 +79,20 @@ objects until its own maintenance completes.
 
 Browser-safe UI code is under `public/`. Credentials, validation, processing,
 API routes, and provider integrations are under `src/`.
+
+## Dashboard activity
+
+The Dashboard includes a 14-day upload chart with one point per member per day
+and a shared upload, download, and deletion history. It records successful
+storage actions only, retains the latest 500 events, and serves history in
+pages of 10 items.
+
+Activity is intentionally in memory to keep the hosted application within its
+current lightweight, scale-to-zero design: it resets when the Container App
+scales to zero, restarts, or deploys a new revision. This is a dashboard
+convenience feature, not a permanent audit record. Cloud files in Box and
+Azure Repos are unaffected. No additional Azure resource, dependency, or
+environment variable is required.
 
 ## Access
 
@@ -225,6 +241,7 @@ so CI does not require provider secrets.
 | `POST` | `/api/auth/login` | Start a predefined-user session |
 | `POST` | `/api/auth/guest` | Start a restricted guest session |
 | `POST` | `/api/auth/logout` | Revoke the current session |
+| `GET` | `/api/activity` | Read 14-day upload points and paginated shared activity (members only; resets after app restart) |
 | `GET` | `/api/storage/providers` | Provider capabilities and current limits |
 | `GET` | `/api/storage/:provider/files` | List the provider's latest cloud files |
 | `GET` | `/api/storage/:provider/files/:fileId/download` | Stream the selected current cloud file |
