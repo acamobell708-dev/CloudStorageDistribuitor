@@ -89,9 +89,15 @@ pages of 10 items.
 
 Activity is intentionally in memory to keep the hosted application within its
 current lightweight, scale-to-zero design: it resets when the Container App
-scales to zero, restarts, or deploys a new revision. This is a dashboard
-convenience feature, not a permanent audit record. Cloud files in Box and
-Azure Repos are unaffected. No additional Azure resource, dependency, or
+scales to zero, restarts, or deploys a new revision. When that local history
+is empty, the Dashboard repopulates the latest 14 days of upload, download,
+and deletion events from the configured Box account's event stream for items
+within the configured Box folder. It also rebuilds Azure Repos uploads and
+deletions from recent Git commits; Git does not expose browser-download events,
+and a commit without author details is shown as **Unknown user**. This is still
+a dashboard convenience feature, not a permanent audit record; Box event
+retention and permissions apply, while permanently purged Azure Git history
+cannot be reconstructed. No additional Azure resource, dependency, or
 environment variable is required.
 
 ## Access

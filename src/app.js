@@ -107,7 +107,10 @@ function createApp(options = {}) {
     sessionService,
     userAccountService
   });
-  const activityController = new ActivityController(activityLogService);
+  const activityController = new ActivityController({
+    activityLogService,
+    providerFactory
+  });
   const controller = new StorageController({
     activityLogService,
     fileDeletionService,

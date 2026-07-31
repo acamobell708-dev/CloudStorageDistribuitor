@@ -295,6 +295,40 @@ class AzureDevOpsApiClient {
     );
   }
 
+  async listCommits(options = {}) {
+    const { apiBaseUrl } = this.getRepositoryDetails();
+    const days = Math.min(31, Math.max(7, Number(options.days) || 14));
+    const fromDate = new Date(
+      Date.now() - days * 24 * 60 * 60 * 1000
+    ).toISOString();
+    const query = new URLSearchParams({
+      "api-version": "7.1",
+      "searchCriteria.$top": "100",
+      "searchCriteria.fromDate": fromDate,
+      "searchCriteria.itemVersion.version": this.branch,
+      "searchCriteria.itemVersion.versionType": "branch"
+    });
+    const result = await this.requestJson(`${apiBaseUrl}/commits?${query}`, {
+      action: `Reading ${this.branch} commit history from Azure Repos`
+    });
+
+    return Array.isArray(result?.value) ? result.value : [];
+  }
+
+  async listCommitChanges(commitId) {
+    const { apiBaseUrl } = this.getRepositoryDetails();
+    const query = new URLSearchParams({
+      "api-version": "7.1",
+      "$top": "100"
+    });
+    const result = await this.requestJson(
+      `${apiBaseUrl}/commits/${encodeURIComponent(commitId)}/changes?${query}`,
+      { action: `Reading Azure Repos changes for commit ${commitId}` }
+    );
+
+    return Array.isArray(result?.changes) ? result.changes : [];
+  }
+
   async createPush({
     changes,
     comment,

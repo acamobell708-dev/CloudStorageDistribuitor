@@ -48,6 +48,45 @@ test("accepts common document, image, audio, and video locations", () => {
   );
 });
 
+test("maps Azure commits into upload and deletion activity events", async () => {
+  const provider = createProvider({
+    apiClient: {
+      listCommits: async () => [
+        {
+          author: { date: "2026-07-31T10:00:00Z", name: "Adam" },
+          changes: [
+            { changeType: "add", item: { path: "/documents/report.pdf" } },
+            { changeType: "delete", item: { path: "/documents/old.pdf" } }
+          ],
+          commitId: "commit-1"
+        },
+        {
+          committer: { date: "2026-07-31T11:00:00Z" },
+          changes: [
+            { changeType: "add", item: { path: "/documents/unknown.pdf" } }
+          ],
+          commitId: "commit-2"
+        }
+      ]
+    }
+  });
+
+  const events = await provider.listActivityEvents({ days: 14 });
+
+  assert.deepEqual(
+    events.map((event) => [
+      event.action,
+      event.file.name,
+      event.user.displayName
+    ]),
+    [
+      ["upload", "report.pdf", "Adam"],
+      ["delete", "old.pdf", "Adam"],
+      ["upload", "unknown.pdf", "Unknown user"]
+    ]
+  );
+});
+
 test("accepts common source-code files", () => {
   const provider = createProvider();
   const supportedFiles = [

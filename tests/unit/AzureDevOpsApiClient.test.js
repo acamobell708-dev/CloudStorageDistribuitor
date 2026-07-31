@@ -71,6 +71,36 @@ test("lists the latest remote branch through the Azure DevOps REST API", async (
   assert.equal(calls[0].url.includes("secret-pat"), false);
 });
 
+test("lists recent commits and the changes in a commit", async () => {
+  const calls = [];
+  const client = new AzureDevOpsApiClient({
+    branch: "main",
+    fetch: async (url) => {
+      calls.push(url);
+      return Response.json(
+        url.includes("/changes?")
+          ? { changes: [{ changeType: "add", item: { path: "/report.pdf" } }] }
+          : { value: [{ commitId: "commit-1" }] }
+      );
+    },
+    pat: "test-token",
+    remote:
+      "https://organization@dev.azure.com/organization/project/_git/media"
+  });
+
+  const commits = await client.listCommits({ days: 14 });
+  const changes = await client.listCommitChanges("commit-1");
+  const commitsUrl = new URL(calls[0]);
+
+  assert.equal(commits[0].commitId, "commit-1");
+  assert.equal(changes[0].item.path, "/report.pdf");
+  assert.equal(commitsUrl.searchParams.get("searchCriteria.$top"), "100");
+  assert.equal(
+    commitsUrl.searchParams.get("searchCriteria.itemVersion.version"),
+    "main"
+  );
+});
+
 test("adds blob sizes from one recursive Azure tree request", async () => {
   const calls = [];
   const client = new AzureDevOpsApiClient({

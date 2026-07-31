@@ -441,6 +441,59 @@ class AzureDevOpsStorageProvider extends StorageProvider {
       .sort((first, second) => first.path.localeCompare(second.path));
   }
 
+  async listActivityEvents(options = {}) {
+    const commits = await this.apiClient.listCommits(options);
+    const eventGroups = await Promise.all(
+      commits.map(async (commit) => {
+        const changes = Array.isArray(commit.changes)
+          ? commit.changes
+          : await this.apiClient.listCommitChanges(commit.commitId);
+
+        return changes
+          .map((change) => this.toActivityEvent(commit, change))
+          .filter(Boolean);
+      })
+    );
+
+    return eventGroups.flat();
+  }
+
+  toActivityEvent(commit, change) {
+    const changeType = String(change?.changeType || "").toLowerCase();
+    const action =
+      changeType === "delete"
+        ? "delete"
+        : changeType === "add" || changeType === "edit"
+          ? "upload"
+          : undefined;
+    const filePath = change?.item?.path || change?.originalPath;
+    const occurredAt = commit?.author?.date || commit?.committer?.date;
+
+    if (!action || !filePath || !occurredAt) {
+      return undefined;
+    }
+
+    return {
+      action,
+      file: {
+        id: `${commit.commitId || "commit"}:${filePath}`,
+        name: path.posix.basename(filePath),
+        path: filePath,
+        type: "file"
+      },
+      occurredAt,
+      provider: {
+        displayName: this.displayName,
+        key: this.key
+      },
+      user: {
+        displayName:
+          commit.author?.name || commit.committer?.name || "Unknown user",
+        id: commit.author?.email || commit.committer?.email || "unknown"
+      }
+    };
+  }
+
   normalizeFolderPath(folderPath) {
     const suppliedPath = String(folderPath || "/").trim();
 

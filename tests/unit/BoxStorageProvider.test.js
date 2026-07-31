@@ -65,6 +65,68 @@ test("uploads arbitrary file types with Box multipart fields in order", async ()
   assert.equal(attributes.name, "source archive.zip");
 });
 
+test("maps Box uploads and deletions from the configured folder into activity events", async () => {
+  const recentDate = new Date().toISOString();
+  const apiClient = createApiClient([
+    {
+      entries: [
+        {
+          created_at: recentDate,
+          created_by: { id: "user-1", name: "Adam" },
+          event_type: "ITEM_UPLOAD",
+          source: {
+            id: "file-1",
+            name: "report.pdf",
+            parent: { id: "configured-folder" },
+            size: 42,
+            type: "file"
+          }
+        },
+        {
+          created_at: recentDate,
+          created_by: { id: "user-1", name: "Adam" },
+          event_type: "ITEM_TRASH",
+          source: {
+            id: "file-2",
+            name: "old-report.pdf",
+            path_collection: {
+              entries: [{ id: "configured-folder", name: "Cloud files" }]
+            },
+            type: "file"
+          }
+        },
+        {
+          created_at: recentDate,
+          created_by: { id: "user-2", name: "Other user" },
+          event_type: "ITEM_UPLOAD",
+          source: {
+            id: "other-file",
+            name: "outside.txt",
+            parent: { id: "other-folder" },
+            type: "file"
+          }
+        }
+      ]
+    }
+  ]);
+  const provider = new BoxStorageProvider({
+    apiClient,
+    folderId: "configured-folder"
+  });
+
+  const events = await provider.listActivityEvents({ days: 14 });
+
+  assert.deepEqual(
+    events.map((event) => [event.action, event.file.name, event.user.displayName]),
+    [
+      ["upload", "report.pdf", "Adam"],
+      ["delete", "old-report.pdf", "Adam"]
+    ]
+  );
+  assert.match(apiClient.calls[0].url, /\/events\?/);
+  assert.match(apiClient.calls[0].url, /stream_type=all/);
+});
+
 test("returns an existing Box file when the content SHA-1 matches", async () => {
   const repeatedBody = Buffer.from("duplicate");
   const crypto = require("node:crypto");

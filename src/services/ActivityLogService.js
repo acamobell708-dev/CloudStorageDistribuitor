@@ -127,6 +127,23 @@ class ActivityLogService {
     };
   }
 
+  listFromEvents(events = [], options = {}) {
+    const snapshot = new ActivityLogService({
+      clock: this.clock,
+      maxEvents: this.maxEvents
+    });
+
+    for (const event of [...events].sort(
+      (left, right) =>
+        new Date(left.occurredAt).getTime() -
+        new Date(right.occurredAt).getTime()
+    )) {
+      snapshot.record(event);
+    }
+
+    return snapshot.list(options);
+  }
+
   createDailyUploads(days) {
     const end = new Date(this.clock.now());
     end.setUTCHours(0, 0, 0, 0);

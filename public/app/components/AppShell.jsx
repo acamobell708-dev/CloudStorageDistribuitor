@@ -2,6 +2,7 @@ import { Icon } from "./Icon";
 import { permissions } from "../auth/permissions";
 import { useAuthSession } from "../auth/AuthSessionProvider";
 import { UserMenu } from "./UserMenu";
+import cloudDisLogo from "../../CloudDisLogo.png";
 
 const navigationSections = [
   {
@@ -101,7 +102,7 @@ export function AppShell({ activePage, children }) {
         <a className="brand" href="/" aria-label="Cloud Storage home">
           <img
             className="brand-logo"
-            src="/CloudDisLogo.png"
+            src={cloudDisLogo}
             alt="Cloud Storage Distributor"
           />
         </a>

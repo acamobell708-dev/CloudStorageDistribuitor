@@ -11,6 +11,15 @@ const { UploadPathService } = require("../UploadPathService");
 const { BoxApiClient } = require("./BoxApiClient");
 const { BoxAuthClient } = require("./BoxAuthClient");
 
+const boxEventActions = Object.freeze({
+  DELETE: "delete",
+  DOWNLOAD: "download",
+  ITEM_DOWNLOAD: "download",
+  ITEM_TRASH: "delete",
+  ITEM_UPLOAD: "upload",
+  UPLOAD: "upload"
+});
+
 class BoxStorageProvider extends StorageProvider {
   constructor(options = {}) {
     super({
@@ -75,6 +84,83 @@ class BoxStorageProvider extends StorageProvider {
 
     const accountDetails = await this.getAccountStorageDetails();
     return accountDetails.maximumUploadSizeBytes;
+  }
+
+  async listActivityEvents(options = {}) {
+    this.requireConfiguration();
+
+    const days = Math.min(31, Math.max(7, Number(options.days) || 14));
+    const startTime = Date.now() - days * 24 * 60 * 60 * 1000;
+    const query = new URLSearchParams({
+      limit: "500",
+      stream_position: "0",
+      stream_type: "all"
+    });
+    const result = await this.apiClient.requestJson(
+      `${this.apiClient.apiUrl}/events?${query}`,
+      { action: "Reading Box activity history" }
+    );
+
+    return (result?.entries || [])
+      .map((event) => this.toActivityEvent(event))
+      .filter(
+        (event) =>
+          event && new Date(event.occurredAt).getTime() >= startTime
+      );
+  }
+
+  toActivityEvent(event) {
+    const action = boxEventActions[event?.event_type];
+    const source = event?.source;
+
+    if (!action || !source || !this.isItemInConfiguredFolder(source)) {
+      return undefined;
+    }
+
+    const occurredAt = event.created_at || event.recorded_at;
+    const timestamp = new Date(occurredAt).getTime();
+
+    if (Number.isNaN(timestamp)) {
+      return undefined;
+    }
+
+    const pathEntries = source.path_collection?.entries || [];
+    const path = pathEntries
+      .map((entry) => entry.name)
+      .filter(Boolean)
+      .join("/");
+
+    return {
+      action,
+      file: {
+        id: source.id,
+        name: source.name,
+        path: path ? `/${path}/${source.name || "Item"}` : "",
+        size: source.size,
+        type: source.type
+      },
+      occurredAt,
+      provider: {
+        displayName: this.displayName,
+        key: this.key
+      },
+      user: {
+        displayName: event.created_by?.name || event.created_by?.login,
+        id: event.created_by?.id
+      }
+    };
+  }
+
+  isItemInConfiguredFolder(item) {
+    const folderId = String(this.folderId);
+
+    if (String(item?.parent?.id || "") === folderId) {
+      return true;
+    }
+
+    return (item?.path_collection?.entries || []).some(
+      (entry) => String(entry.id || "") === folderId
+    );
   }
 
   async getAccountStorageDetails() {

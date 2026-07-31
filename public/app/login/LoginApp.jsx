@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AuthApiClient } from "../auth/AuthApiClient";
 import { Icon } from "../components/Icon";
+import cloudDisLogo from "../../CloudDisLogo.png";
 
 export function LoginApp() {
   const apiClient = useMemo(() => new AuthApiClient(), []);
@@ -87,7 +88,7 @@ export function LoginApp() {
       <a className="login-brand" href="/login.html">
         <img
           className="brand-logo"
-          src="/CloudDisLogo.png"
+          src={cloudDisLogo}
           alt="Cloud Storage Distributor"
         />
       </a>
