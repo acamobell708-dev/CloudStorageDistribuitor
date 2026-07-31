@@ -3,6 +3,10 @@
 A React and Node.js app for uploading files to Box or an Azure DevOps Git
 repository from one browser interface. Cloud credentials remain on the server.
 
+> **Main TODO — Cloudflare R2 provider:** Add Cloudflare R2 as the next
+> storage provider. R2 is S3-compatible object storage, so it will join Box
+> and Azure Repos behind the existing provider factory and shared browser flow.
+
 ## Features
 
 - Provider dropdown for Box and Azure Repos.
